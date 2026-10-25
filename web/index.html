@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>鲸语 WhaleTalk</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#0f1117;--panel:#171a23;--panel2:#1e2230;--line:#2a2f3f;--text:#e6e8ef;--dim:#8b90a3;--pink:#fb7299;--blue:#23ade5;--green:#3ecf8e;--yellow:#f5b84b;--red:#f2545b}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.5 "Microsoft YaHei UI","PingFang SC",system-ui,sans-serif}
+.app{display:flex;height:100vh}
+nav{width:168px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 10px;gap:4px;flex-shrink:0}
+nav .brand{font-weight:700;font-size:15px;padding:4px 10px 14px;color:var(--pink)}
+nav .brand small{display:block;color:var(--dim);font-weight:400;font-size:12px}
+nav button{all:unset;cursor:pointer;padding:9px 12px;border-radius:8px;color:var(--dim)}
+nav button:hover{background:var(--panel2);color:var(--text)}
+nav button.on{background:rgba(251,114,153,.14);color:var(--pink);font-weight:600}
+nav .spacer{flex:1}
+main{flex:1;overflow:auto;padding:18px 22px}
+section{display:none}section.on{display:block}
+h2{margin:0 0 14px;font-size:18px}
+h3{margin:0 0 10px;font-size:15px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:1fr 1fr}.g5{grid-template-columns:repeat(5,1fr)}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.stat .k{color:var(--dim);font-size:12px}.stat .v{font-weight:600;font-size:15px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v.ok{color:var(--green)}.v.warn{color:var(--yellow)}.v.bad{color:var(--red)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.row:last-child{margin-bottom:0}
+label.f{display:flex;flex-direction:column;gap:4px;color:var(--dim);font-size:12px;flex:1;min-width:140px}
+label.c{display:flex;gap:6px;align-items:center;cursor:pointer;color:var(--text)}
+input,select,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:7px 10px;font:inherit;outline:none;width:100%}
+input[type=checkbox]{width:auto;accent-color:var(--pink)}
+input[type=range]{padding:0;accent-color:var(--pink)}
+input:focus,select:focus,textarea:focus{border-color:var(--pink)}
+textarea{resize:vertical;min-height:62px}
+.btn{all:unset;cursor:pointer;padding:7px 14px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);white-space:nowrap;text-align:center}
+.btn:hover{border-color:var(--pink)}
+.btn.p{background:var(--pink);border-color:var(--pink);color:#fff}
+.btn.b{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.r{color:var(--red)}
+.btn.sm{padding:4px 10px;font-size:12px}
+.feed{height:calc(100vh - 380px);min-height:260px;overflow:auto;font-size:13px}
+.feed .it{padding:6px 2px;border-bottom:1px dashed var(--line);display:flex;gap:8px}
+.feed .it .t{color:var(--dim);flex-shrink:0;font-variant-numeric:tabular-nums}
+.feed .it.skip{opacity:.45}
+.tag{display:inline-block;padding:0 6px;border-radius:5px;font-size:12px;flex-shrink:0;height:20px;line-height:20px}
+.tag.enter{background:#2c3a52;color:#8fb6ff}.tag.follow{background:#3a2c52;color:#c49bff}.tag.danmaku{background:#26323a;color:#9fd3e6}
+.tag.gift{background:#4a3a1f;color:#ffcf70}.tag.guard{background:#4a2335;color:#ff8fb3}.tag.superchat{background:#4a2a1f;color:#ff9f70}
+.tag.like{background:#2c3a2c;color:#9fe69f}.tag.manual{background:#333;color:#ddd}
+.tag.log{background:#2a2f3f;color:var(--dim)}.tag.warn{background:#4a3f1f;color:var(--yellow)}.tag.error{background:#4a1f24;color:var(--red)}
+.reply .txt{color:var(--text)}.reply .src{color:var(--dim);font-size:12px}
+.reply.speaking{background:rgba(251,114,153,.1);border-radius:6px}
+.queue{font-size:12px;color:var(--dim);max-height:110px;overflow:auto}
+.hint{color:var(--dim);font-size:12px}
+code{background:var(--panel2);padding:1px 5px;border-radius:4px;color:var(--yellow)}
+.ev-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.ev-head h3{margin:0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg label{padding:4px 12px;cursor:pointer;color:var(--dim)}
+.seg input{display:none}
+.seg input:checked+span{color:var(--pink);font-weight:600}
+#qrbox svg{background:#fff;padding:8px;border-radius:8px;width:200px;height:200px}
+.toast{position:fixed;right:20px;bottom:20px;background:var(--panel2);border:1px solid var(--pink);padding:10px 16px;border-radius:10px;opacity:0;transition:.25s;pointer-events:none;max-width:420px}
+.toast.on{opacity:1}
+pre.log{background:#0b0d12;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:260px;overflow:auto;font-size:12px;white-space:pre-wrap;margin:0}
+.now{min-height:46px;font-size:16px;padding:10px 14px;border-radius:10px;background:linear-gradient(90deg,rgba(251,114,153,.18),rgba(35,173,229,.1));border:1px solid var(--line)}
+.now .dim{color:var(--dim);font-size:13px}
+.emo{flex-wrap:nowrap}
+</style>
+</head>
+<body>
+<div class="app">
+<nav>
+  <div class="brand">鲸语 WhaleTalk<small>B站直播 AI 语音助手</small></div>
+  <button data-tab="dash" class="on">控制台</button>
+  <button data-tab="room">直播间 / 登录</button>
+  <button data-tab="rules">回复规则</button>
+  <button data-tab="fixed">固定回复</button>
+  <button data-tab="songs">点歌</button>
+  <button data-tab="ai">AI 设置</button>
+  <button data-tab="voice">语音设置</button>
+  <button data-tab="l2d">Live2D 皮套</button>
+  <button data-tab="obs">OBS 字幕</button>
+  <div class="spacer"></div>
+  <button id="quitBtn" style="color:var(--red)">退出程序</button>
+</nav>
+<main>
+
+<!-- ========== 控制台 ========== -->
+<section id="dash" class="on">
+  <div class="grid g5" style="margin-bottom:14px">
+    <div class="stat"><div class="k">直播间</div><div class="v" id="s_bili">-</div></div>
+    <div class="stat"><div class="k">B站账号</div><div class="v" id="s_login">-</div></div>
+    <div class="stat"><div class="k">AI</div><div class="v" id="s_ai">-</div></div>
+    <div class="stat"><div class="k">语音引擎</div><div class="v" id="s_engine">-</div></div>
+    <div class="stat"><div class="k">自动回复</div><div class="v" id="s_paused">-</div></div>
+  </div>
+  <div class="card">
+    <div class="row">
+      <span class="btn b" data-act="connect">连接直播间</span>
+      <span class="btn" data-act="disconnect">断开</span>
+      <span class="btn" id="pauseBtn">暂停自动回复</span>
+      <span class="btn" data-ctl="skip">跳过当前语音</span>
+      <span class="btn" data-ctl="clear">清空队列</span>
+      <span style="flex:1"></span>
+      <span class="hint">待回复：<b id="s_queue">0</b></span>
+    </div>
+    <div class="now" id="nowSpeaking"><span class="dim">当前没有在说话</span></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h3>直播间消息</h3><div class="feed" id="feedEv"></div></div>
+    <div class="card"><h3>AI 回复</h3><div class="feed" id="feedRe"></div>
+      <div class="queue" id="queueList"></div></div>
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <h3>手动发言</h3>
+      <div class="row"><input id="sayText" placeholder="输入一句话，直接念，或者交给 AI 组织语言再念"></div>
+      <div class="row"><span class="btn p" id="sayBtn">直接念</span><span class="btn" id="sayAiBtn">让 AI 说</span></div>
+    </div>
+    <div class="card">
+      <h3>模拟测试（不需要真实观众）</h3>
+      <div class="row">
+        <select id="tType" style="width:110px">
+          <option value="danmaku">弹幕</option><option value="enter">进房</option><option value="follow">关注</option>
+          <option value="gift">礼物</option><option value="guard">上舰</option><option value="superchat">醒目留言</option><option value="like">点赞</option>
+        </select>
+        <input id="tName" placeholder="观众名" value="测试观众" style="width:120px">
+        <input id="tText" placeholder="弹幕/留言内容" value="主播晚上好，今天播什么呀？" style="flex:1">
+      </div>
+      <div class="row">
+        <input id="tGift" placeholder="礼物名" value="小花花" style="width:110px">
+        <input id="tNum" type="number" placeholder="数量/月数" value="1" style="width:90px">
+        <input id="tValue" type="number" placeholder="价值(元)" value="1" style="width:90px">
+        <select id="tGuard" style="width:90px"><option>舰长</option><option>提督</option><option>总督</option></select>
+        <span class="btn b" id="testBtn">发送模拟事件</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== 直播间 ========== -->
+<section id="room">
+  <h2>直播间 / 登录</h2>
+  <div class="card">
+    <div class="row">
+      <label class="f" style="max-width:260px">直播间房间号（网址 live.bilibili.com/ 后面的数字）<input data-k="room_id" type="number"></label>
+      <label class="c" style="margin-top:18px"><input type="checkbox" data-k="auto_connect">启动软件时自动连接</label>
+      <span class="btn b" data-act="connect" style="margin-top:18px">保存并重连</span>
+    </div>
+  </div>
+  <div class="card">
+    <h3>B站账号登录 <span class="hint" id="loginState"></span></h3>
+    <p class="hint">不登录也能收到弹幕，但 B 站会把观众名字打码（如“用***”），AI 就叫不出名字。建议用<b>小号</b>扫码登录，Cookie 只保存在本机 config.json。</p>
+    <div class="row">
+      <span class="btn p" id="qrBtn">扫码登录</span>
+      <span class="btn r" id="logoutBtn">退出登录</span>
+    </div>
+    <div id="qrbox" class="row" style="display:none;align-items:flex-start;gap:16px">
+      <div id="qrsvg"></div>
+      <div><div id="qrmsg" style="font-size:15px">请用B站手机客户端扫码</div><div class="hint">二维码 3 分钟内有效</div></div>
+    </div>
+    <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">或者手动粘贴 Cookie</summary>
+      <div class="row" style="margin-top:8px"><input id="cookieIn" placeholder="SESSDATA=...; bili_jct=...; DedeUserID=..."><span class="btn" id="cookieBtn">保存</span></div>
+    </details>
+  </div>
+</section>
+
+<!-- ========== 回复规则 ========== -->
+<section id="rules">
+  <h2>回复规则</h2>
+  <div class="card hint">
+    模板可写多行，每次随机选一行。可用变量：<code>{name}</code> 观众名　<code>{text}</code> 弹幕/留言内容　<code>{gift}</code> 礼物名　<code>{num}</code> 数量/开通月数　<code>{value}</code> 价值(元)　<code>{guard}</code> 舰长/提督/总督　<code>{price}</code> 醒目留言金额。<br>
+    “AI 提示”是发给 AI 的说明（同样可用变量）；AI 出错时会自动改用模板。
+  </div>
+  <div id="evCards"></div>
+  <div class="card">
+    <h3>过滤与队列</h3>
+    <div class="row">
+      <label class="f">屏蔽词（命中则不回复，逗号或换行分隔）<textarea data-k="filter.blocklist"></textarea></label>
+      <label class="f">忽略的观众（名字或 UID，逗号或换行分隔）<textarea data-k="filter.ignore_users"></textarea></label>
+    </div>
+    <div class="row">
+      <label class="f">待回复队列上限（满了丢弃优先级最低的）<input type="number" data-k="filter.max_queue"></label>
+      <label class="f">最长等待秒数（太久的消息就不回了）<input type="number" data-k="filter.max_wait"></label>
+      <label class="f">名字最多念几个字<input type="number" data-k="filter.name_max_len"></label>
+    </div>
+    <div class="row">
+      <label class="c"><input type="checkbox" data-k="filter.ignore_owner">不回复主播自己的消息</label>
+      <label class="c"><input type="checkbox" data-k="filter.rename_default">打码名 / bili_xxx 默认名念成“新朋友”</label>
+    </div>
+    <p class="hint">优先级：醒目留言 = 上舰 &gt; 礼物 &gt; 弹幕 = 关注 &gt; 进房 &gt; 点赞。</p>
+  </div>
+</section>
+
+<!-- ========== AI ========== -->
+<section id="ai">
+  <h2>AI 设置</h2>
+  <div class="card">
+    <div class="row">
+      <span class="seg">
+        <label><input type="radio" name="backend" value="qoder" data-k="ai.backend"><span>Qoder 内置模型</span></label>
+        <label><input type="radio" name="backend" value="openai" data-k="ai.backend"><span>OpenAI 兼容 API</span></label>
+      </span>
+    </div>
+    <div id="qoderBox">
+      <div class="row">
+        <label class="f">qodercli 路径（留空用默认）<input data-k="ai.qoder_exe" id="qoderExe"></label>
+        <span class="btn" data-pick="ai.qoder_exe" data-kind="exe" style="margin-top:18px">浏览…</span>
+      </div>
+      <div class="row">
+        <label class="f">模型（留空=默认）<input data-k="ai.qoder_model" list="qmodels"></label>
+        <datalist id="qmodels"><option>Fast</option><option>Auto</option><option>Efficient</option><option>DeepSeek-Flash</option><option>Qwen3.8-Flash</option><option>GLM-5.3-Flash</option><option>MiniMax-M3.1-Flash</option><option>Ultimate</option></datalist>
+        <label class="f">每多少句重开会话（控制上下文长度）<input type="number" data-k="ai.recycle_after"></label>
+      </div>
+      <div class="row"><span class="btn b" data-listmodels="ai.qoder_model">列出当前所有可用模型</span><span class="hint" data-modelhint="ai.qoder_model"></span></div>
+      <div class="row" data-modellist="ai.qoder_model" style="gap:6px"></div>
+      <p class="hint">首次使用需要登录 Qoder CLI：运行软件目录下的 <code>qoder_login.bat</code>。Qoder 会话常驻后台，会记得之前聊过什么。</p>
+    </div>
+    <div id="openaiBox">
+      <div class="row">
+        <label class="f">接口地址<input data-k="ai.openai_base"></label>
+        <label class="f">模型名<input data-k="ai.openai_model"></label>
+        <label class="f">API Key<input type="password" data-k="ai.openai_key"></label>
+      </div>
+      <div class="row"><span class="btn b" data-listmodels="ai.openai_model">列出当前所有可用模型</span><span class="hint" data-modelhint="ai.openai_model"></span></div>
+      <div class="row" data-modellist="ai.openai_model" style="gap:6px"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>人设与说话风格</h3>
+    <textarea data-k="ai.persona" style="min-height:120px"></textarea>
+    <div class="row" style="margin-top:10px">
+      <label class="f">每次回复最多字数<input type="number" data-k="ai.max_chars"></label>
+      <label class="f">超时秒数<input type="number" data-k="ai.timeout"></label>
+      <span class="btn" id="aiResetBtn" style="margin-top:18px">清空 AI 记忆</span>
+    </div>
+  </div>
+  <div class="card">
+    <h3>测试 AI</h3>
+    <div class="row"><input id="aiPrompt" value="观众小明发弹幕说：「主播唱首歌吧！」。请直接回应这条弹幕。"><span class="btn p" id="aiTestBtn">发送</span></div>
+    <div id="aiOut" class="hint"></div>
+  </div>
+</section>
+
+<!-- ========== 语音 ========== -->
+<section id="voice">
+  <h2>语音设置（GPT-SoVITS）</h2>
+  <div class="card">
+    <div class="row">
+      <label class="c"><input type="checkbox" data-k="tts.enabled">启用语音（关掉则只显示文字）</label>
+      <label class="c"><input type="checkbox" data-k="tts.auto_start">软件启动时自动启动引擎</label>
+      <label class="c"><input type="checkbox" data-k="tts.stop_on_exit">退出软件时关闭本软件启动的引擎</label>
+    </div>
+    <div class="row">
+      <label class="f">GPT-SoVITS 目录<input data-k="tts.gsv_dir"></label>
+      <span class="btn" data-pick="tts.gsv_dir" data-kind="dir" style="margin-top:18px">浏览…</span>
+      <label class="f" style="max-width:220px">API 地址<input data-k="tts.api_url"></label>
+    </div>
+    <div class="row">
+      <span class="btn b" id="engStart">启动引擎</span>
+      <span class="btn" id="engStop">关闭引擎</span>
+      <span class="btn" id="engLogBtn">查看引擎日志</span>
+    </div>
+    <pre class="log" id="engLog" style="display:none"></pre>
+  </div>
+  <div class="card">
+    <h3>音色</h3>
+    <div class="row">
+      <label class="f">GPT 模型 (.ckpt)<select data-k="tts.gpt_weights" id="gptSel"></select></label>
+      <label class="f">SoVITS 模型 (.pth)<select data-k="tts.sovits_weights" id="sovitsSel"></select></label>
+      <span class="btn sm" id="wRefresh" style="margin-top:18px">刷新列表</span>
+    </div>
+    <p class="hint">没有自己训练的模型时用默认的 v2Pro 预训练模型即可（零样本克隆参考音频的声音）。自己训练的模型放在 GPT_weights* / SoVITS_weights* 目录里会自动列出。</p>
+    <div class="row">
+      <label class="f">参考音频（3~10 秒干净人声）<input data-k="tts.ref_audio"></label>
+      <span class="btn" data-pick="tts.ref_audio" data-kind="audio" style="margin-top:18px">浏览…</span>
+    </div>
+    <div class="row">
+      <label class="f">参考音频里说的话（务必一字不差）<input data-k="tts.ref_text"></label>
+      <label class="f" style="max-width:130px">参考音频语言<select data-k="tts.ref_lang"><option value="zh">中文</option><option value="en">英文</option><option value="ja">日文</option><option value="ko">韩文</option><option value="yue">粤语</option><option value="auto">自动</option></select></label>
+      <label class="f" style="max-width:130px">合成语言<select data-k="tts.text_lang"><option value="zh">中英混合</option><option value="auto">自动</option><option value="ja">日文</option><option value="en">英文</option><option value="yue">粤语</option></select></label>
+    </div>
+  </div>
+  <div class="card">
+    <h3>语气与播放</h3>
+    <div class="row">
+      <label class="f">语速 <b data-show="tts.speed"></b><input type="range" min="0.6" max="1.6" step="0.05" data-k="tts.speed"></label>
+      <label class="f">表现力 temperature <b data-show="tts.temperature"></b><input type="range" min="0.3" max="1.5" step="0.05" data-k="tts.temperature"></label>
+      <label class="f">采样步数（越小越快）<select data-k="tts.sample_steps"><option>4</option><option>8</option><option>16</option><option>32</option></select></label>
+    </div>
+    <div class="row">
+      <label class="f">top_k <input type="number" data-k="tts.top_k"></label>
+      <label class="f">top_p <input type="number" step="0.05" data-k="tts.top_p"></label>
+      <label class="f">音量 <b data-show="audio.volume"></b><input type="range" min="0" max="150" step="5" data-k="audio.volume"></label>
+    </div>
+    <div class="row">
+      <label class="f">输出设备（想让 OBS 单独采集可选虚拟声卡）<select data-k="audio.device" id="devSel"></select></label>
+      <span class="btn sm" id="devRefresh" style="margin-top:18px">刷新</span>
+    </div>
+    <div class="row"><input id="ttsTest" value="大家好，我是你们的主播，欢迎来到直播间！"><span class="btn p" id="ttsTestBtn">试听</span></div>
+  </div>
+</section>
+
+<!-- ========== 固定回复 ========== -->
+<section id="fixed">
+  <h2>固定回复</h2>
+  <div class="card hint">
+    弹幕命中关键词时，不经过 AI，直接念你写好的回复（多行=随机选一行，可用 <code>{name}</code> <code>{text}</code>）。<br>
+    固定回复不受“回复概率”和“触发词”限制，即使关掉了弹幕 AI 回复也照样生效；但仍受屏蔽词和同一观众冷却限制。从上到下匹配，命中第一条就停。<br>
+    匹配方式：<b>包含</b> = 弹幕里有任意一个关键词（逗号分隔）；<b>完全一致</b> = 弹幕正好等于某个关键词；<b>正则</b> = 关键词按正则表达式匹配。
+  </div>
+  <div id="fixedList"></div>
+  <span class="btn p" id="fixedAdd">+ 添加一条</span>
+</section>
+
+<!-- ========== 点歌 ========== -->
+<section id="songs">
+  <h2>点歌</h2>
+  <div class="card">
+    <div class="row">
+      <label class="c"><input type="checkbox" data-k="songs.enabled">启用点歌</label>
+      <span style="flex:1"></span>
+      <span class="btn" id="sgPause">暂停</span>
+      <span class="btn b" data-sg="skip">切歌</span>
+      <span class="btn r" data-sg="clear">清空歌单</span>
+    </div>
+    <div class="now" id="sgNow"><span class="dim">现在没有在放歌</span></div>
+    <div id="sgQueue" style="margin-top:10px"></div>
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <h3>主播手动点歌</h3>
+      <div class="row"><input id="sgQ" placeholder="歌名 / 歌名 歌手"><span class="btn p" id="sgSearch">搜索</span></div>
+      <div id="sgResults" class="queue" style="max-height:260px;color:var(--text)"></div>
+    </div>
+    <div class="card">
+      <h3>网易云账号 <span class="hint" id="neState"></span></h3>
+      <p class="hint">登录 VIP 账号后，VIP 歌曲也能完整播放；不登录只能播免费歌曲。</p>
+      <div class="row"><span class="btn p" id="neQrBtn">扫码登录</span><span class="btn r" id="neLogout">退出登录</span></div>
+      <div id="neQrBox" class="row" style="display:none;align-items:flex-start;gap:16px">
+        <div id="neQrSvg" style="background:#fff;padding:8px;border-radius:8px;width:180px;height:180px"></div>
+        <div><div id="neQrMsg">请用网易云音乐手机 App 扫码</div><div class="hint">扫码登录失败时，可以手动粘贴 Cookie（浏览器登录 music.163.com 后复制 MUSIC_U）</div></div>
+      </div>
+      <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">手动粘贴 Cookie</summary>
+        <div class="row" style="margin-top:8px"><input id="neCookie" placeholder="MUSIC_U=..."><span class="btn" id="neCookieBtn">保存</span></div>
+      </details>
+    </div>
+  </div>
+  <div class="card">
+    <h3>点歌规则</h3>
+    <p class="hint">观众先送“点歌礼物”拿到点歌券，再发弹幕 <code>点歌:歌名</code>（也支持 <code>点歌 歌名 歌手</code>）。送“插队礼物”拿到插队券：已经在排队的歌会立刻置顶，还没点歌的话下一首点的歌直接置顶。礼物名填 <code>*</code> 表示任意礼物都算。</p>
+    <div class="row">
+      <label class="c" style="margin-top:18px"><input type="checkbox" data-k="songs.require_gift">点歌需要先送礼物（关掉=免费点歌）</label>
+      <label class="f">点歌礼物（逗号分隔）<input data-k="songs.song_gifts"></label>
+      <label class="f" style="max-width:150px">送几个换 1 张点歌券<input type="number" data-k="songs.song_gift_count"></label>
+    </div>
+    <div class="row">
+      <label class="f">插队礼物（逗号分隔，留空=不开插队）<input data-k="songs.pin_gifts"></label>
+      <label class="f" style="max-width:150px">送几个换 1 张插队券<input type="number" data-k="songs.pin_gift_count"></label>
+    </div>
+    <div class="row">
+      <label class="f">歌单最多几首<input type="number" data-k="songs.max_queue"></label>
+      <label class="f">每人最多同时排几首<input type="number" data-k="songs.max_per_user"></label>
+      <label class="f">歌曲最长几分钟<input type="number" data-k="songs.max_minutes"></label>
+    </div>
+    <div class="row">
+      <label class="f">音乐音量 <b data-show="songs.volume"></b><input type="range" min="0" max="120" step="5" data-k="songs.volume"></label>
+      <label class="f">说话时音乐压低到 <b data-show="songs.duck"></b>%<input type="range" min="0" max="100" step="5" data-k="songs.duck"></label>
+    </div>
+    <details><summary class="hint" style="cursor:pointer">语音播报（可改文案，变量：{name} {song} {artist} {pos} {query} {gift} {num}）</summary>
+      <div id="sgTpl" style="margin-top:8px"></div>
+    </details>
+  </div>
+  <div class="card">
+    <h3>观众的券</h3>
+    <div id="sgCredits" class="hint">暂无</div>
+  </div>
+  <div class="card">
+    <p>OBS / 直播姬添加浏览器源显示歌单（背景透明，宽 540、高 480 左右）：</p>
+    <div class="row"><input id="sgUrl" readonly><span class="btn" data-copy="#sgUrl">复制</span></div>
+  </div>
+</section>
+
+<!-- ========== Live2D ========== -->
+<section id="l2d">
+  <h2>Live2D 皮套</h2>
+  <div class="card">
+    <div class="row">
+      <label class="c"><input type="checkbox" data-k="live2d.enabled" id="l2dOn">启用 Live2D 皮套（同时自动开启气泡字幕）</label>
+      <span style="flex:1"></span>
+      <span class="btn b" id="l2dPreview">打开预览窗口</span>
+    </div>
+    <p>在 OBS / 直播姬里添加 <b>浏览器源</b>，网址填（背景透明）：</p>
+    <div class="row"><input id="l2dUrl" readonly><span class="btn" data-copy="#l2dUrl">复制</span></div>
+    <p class="hint">建议宽 1080、高 1080（或和你的画布一样大）。直播软件不支持透明网页时，用 <code>/live2d?bg=00ff00</code> 绿幕背景再抠像。<span id="l2dErr" style="color:var(--red)"></span></p>
+  </div>
+  <div class="card">
+    <h3>模型</h3>
+    <div class="row">
+      <label class="f">模型文件夹<input data-k="live2d.model_dir"></label>
+      <span class="btn" data-pick="live2d.model_dir" data-kind="dir" style="margin-top:18px">浏览…</span>
+      <label class="f" style="max-width:260px">模型文件 (.model3.json)<select data-k="live2d.model_file" id="l2dModelFile"></select></label>
+    </div>
+    <div class="row">
+      <label class="f">大小 <b data-show="live2d.scale"></b><input type="range" min="0.3" max="3" step="0.05" data-k="live2d.scale"></label>
+      <label class="f">左右位置 <b data-show="live2d.x"></b><input type="range" min="0" max="1" step="0.01" data-k="live2d.x"></label>
+      <label class="f">上下位置 <b data-show="live2d.y"></b><input type="range" min="-1" max="1" step="0.01" data-k="live2d.y"></label>
+    </div>
+    <div class="row">
+      <label class="c"><input type="checkbox" data-k="live2d.breath">自动呼吸</label>
+      <label class="c"><input type="checkbox" data-k="live2d.blink">自动眨眼</label>
+      <label class="c"><input type="checkbox" data-k="live2d.sway">头部轻微摆动</label>
+      <label class="c"><input type="checkbox" data-k="live2d.lipsync">说话时对口型</label>
+    </div>
+    <div class="row">
+      <label class="f">口型幅度 <b data-show="live2d.lip_gain"></b><input type="range" min="0.3" max="2.5" step="0.1" data-k="live2d.lip_gain"></label>
+      <label class="f">待机动作（循环播放，留空=静止）<select data-k="live2d.idle_motion" id="l2dIdle"></select></label>
+      <label class="f">说完后表情保留秒数<input type="number" step="0.5" data-k="live2d.expr_hold"></label>
+    </div>
+    <div class="hint" style="margin-bottom:6px">常驻表情（一直开着的配件/换装，比如眼镜、发型）：</div>
+    <div id="l2dBase" class="row" style="gap:6px 14px"></div>
+  </div>
+  <div class="card">
+    <h3>气泡字幕</h3>
+    <div class="row">
+      <label class="c"><input type="checkbox" data-k="live2d.bubble">显示气泡</label>
+      <label class="f">气泡左右（相对模型） <b data-show="live2d.bubble_x"></b><input type="range" min="-0.6" max="0.6" step="0.01" data-k="live2d.bubble_x"></label>
+      <label class="f">气泡上下（相对模型顶部） <b data-show="live2d.bubble_y"></b><input type="range" min="-0.2" max="1" step="0.01" data-k="live2d.bubble_y"></label>
+    </div>
+    <div class="row">
+      <label class="f">字号<input type="number" data-k="live2d.bubble_font"></label>
+      <label class="f">最大宽度(像素)<input type="number" data-k="live2d.bubble_width"></label>
+      <label class="f">说完后保留秒数<input type="number" step="0.5" data-k="live2d.bubble_hold"></label>
+      <label class="f">底色<input type="color" data-k="live2d.bubble_bg" style="height:36px;padding:2px"></label>
+      <label class="f">文字色<input type="color" data-k="live2d.bubble_color" style="height:36px;padding:2px"></label>
+      <label class="f">边框色<input type="color" data-k="live2d.bubble_border" style="height:36px;padding:2px"></label>
+    </div>
+    <div class="row"><input id="l2dBubbleTest" value="谢谢大家的支持，今天也要开开心心的哦！"><span class="btn" id="l2dBubbleBtn">预览气泡</span></div>
+  </div>
+  <div class="card">
+    <h3>情绪 → 表情 / 动作</h3>
+    <p class="hint">AI 回复时会从这些情绪里挑一个（名称会发给 AI）；模板和固定回复按“关键词”判断情绪。表情可以填多个（逗号分隔），从下面的列表里点名字可以试播。</p>
+    <div id="emoList"></div>
+    <span class="btn p" id="emoAdd">+ 添加情绪</span>
+  </div>
+  <div class="card">
+    <h3>试播表情 / 动作</h3>
+    <div class="hint">表情（点击试播 4 秒）：</div>
+    <div id="l2dExprBtns" class="row" style="gap:6px;margin-top:6px"></div>
+    <div class="hint">动作：</div>
+    <div id="l2dMotionBtns" class="row" style="gap:6px;margin-top:6px"></div>
+  </div>
+</section>
+
+<!-- ========== OBS ========== -->
+<section id="obs">
+  <h2>OBS 字幕</h2>
+  <div class="card">
+    <p>在 OBS 里添加 <b>浏览器源</b>，网址填：</p>
+    <div class="row"><input id="ovUrl" readonly><span class="btn" id="ovCopy">复制</span></div>
+    <p class="hint">宽 1280、高 200 左右即可，背景透明。正在说话时显示字幕，说完一段时间后自动隐藏。</p>
+    <div class="row"><label class="f" style="max-width:240px">说完后保留秒数<input type="number" data-k="overlay.seconds"></label></div>
+  </div>
+</section>
+</main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+let CFG = {};
+const api = (url, body) => fetch(url, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json', 'X-BVB': '1'}, body: JSON.stringify(body)}).then(r => r.json());
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 2600); }
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+// ---------- 页签 ----------
+$$('nav button[data-tab]').forEach(b => b.onclick = () => {
+  $$('nav button[data-tab]').forEach(x => x.classList.toggle('on', x === b));
+  $$('main section').forEach(s => s.classList.toggle('on', s.id === b.dataset.tab));
+});
+
+// ---------- 回复规则卡片 ----------
+const EV = [
+  ['danmaku', '弹幕', [['cooldown_user', '同一观众冷却(秒)'], ['probability', '回复概率(%)'], ['trigger_words', '触发词（留空=全部回复，填了只回含这些词的）', 'text']], [['ignore_emoticon', '忽略表情包弹幕'], ['read_original', 'AI 回复前先念出原弹幕']]],
+  ['enter', '进入直播间', [['cooldown_user', '同一观众多久内不重复欢迎(秒)'], ['merge_window', '合并窗口(秒)'], ['max_names', '一次最多念几个名字']], []],
+  ['follow', '关注', [['cooldown_user', '同一观众冷却(秒)'], ['merge_window', '合并窗口(秒)'], ['max_names', '一次最多念几个名字']], []],
+  ['gift', '礼物', [['merge_window', '连击合并窗口(秒)'], ['min_value', '付费礼物最低价值(元)']], [['thank_free', '感谢免费礼物（小心心、辣条等）']]],
+  ['guard', '上舰（舰长/提督/总督）', [], []],
+  ['superchat', '醒目留言 SC', [], []],
+  ['like', '点赞', [['cooldown_user', '同一观众冷却(秒)'], ['merge_window', '合并窗口(秒)'], ['max_names', '一次最多念几个名字']], []],
+];
+$('#evCards').innerHTML = EV.map(([k, name, nums, checks]) => `
+  <div class="card">
+    <div class="ev-head"><h3><label class="c"><input type="checkbox" data-k="events.${k}.enabled">${name}</label></h3>
+      <span class="seg"><label><input type="radio" name="mode_${k}" value="ai" data-k="events.${k}.mode"><span>AI 回复</span></label><label><input type="radio" name="mode_${k}" value="template" data-k="events.${k}.mode"><span>模板</span></label></span></div>
+    ${nums.length ? `<div class="row">${nums.map(([f, l, t]) => `<label class="f">${l}<input ${t ? '' : 'type="number"'} data-k="events.${k}.${f}"></label>`).join('')}</div>` : ''}
+    ${checks.length ? `<div class="row">${checks.map(([f, l]) => `<label class="c"><input type="checkbox" data-k="events.${k}.${f}">${l}</label>`).join('')}</div>` : ''}
+    <div class="row"><label class="f">模板（每行一条）<textarea data-k="events.${k}.templates"></textarea></label>
+    <label class="f">AI 提示<textarea data-k="events.${k}.ai_prompt"></textarea></label></div>
+  </div>`).join('');
+
+// ---------- 配置绑定 ----------
+const getPath = (o, p) => p.split('.').reduce((a, k) => a?.[k], o);
+function setPatch(path, val) { const ks = path.split('.'), patch = {}; let cur = patch; ks.forEach((k, i) => { if (i === ks.length - 1) cur[k] = val; else cur = cur[k] = {}; }); return patch; }
+function fillForm() {
+  $$('[data-k]').forEach(el => {
+    const v = getPath(CFG, el.dataset.k);
+    if (el.type === 'checkbox') el.checked = !!v;
+    else if (el.type === 'radio') el.checked = el.value === v;
+    else if (el.tagName === 'SELECT') { if (v !== undefined && ![...el.options].some(o => o.value == v)) el.add(new Option(v || '（系统默认）', v)); el.value = v ?? ''; }
+    else el.value = v ?? '';
+  });
+  $$('[data-show]').forEach(el => el.textContent = getPath(CFG, el.dataset.show));
+  $('#qoderBox').style.display = CFG.ai.backend === 'openai' ? 'none' : '';
+  $('#openaiBox').style.display = CFG.ai.backend === 'openai' ? '' : 'none';
+  $('#qoderExe').placeholder = CFG._qoder_default;
+}
+let saveTimer = null, pending = {};
+function deepMerge(a, b) { for (const k in b) { if (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k])) { a[k] = a[k] || {}; deepMerge(a[k], b[k]); } else a[k] = b[k]; } return a; }
+function onField(el) {
+  let v;
+  if (el.type === 'checkbox') v = el.checked;
+  else if (el.type === 'radio') { if (!el.checked) return; v = el.value; }
+  else if (el.type === 'number' || el.type === 'range' || el.dataset.k === 'tts.sample_steps') v = el.value === '' ? 0 : Number(el.value);
+  else v = el.value;
+  const p = setPatch(el.dataset.k, v);
+  deepMerge(CFG, p); deepMerge(pending, p);
+  $$(`[data-show="${el.dataset.k}"]`).forEach(x => x.textContent = v);
+  if (el.dataset.k === 'ai.backend') fillForm();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => { const p = pending; pending = {}; await api('/api/config', p); toast('设置已保存'); }, 500);
+}
+document.addEventListener('change', e => { if (e.target.dataset?.k) onField(e.target); });
+document.addEventListener('input', e => { if (e.target.dataset?.k && e.target.type === 'range') onField(e.target); });
+
+async function loadWeights() {
+  const w = await api('/api/tts/weights');
+  for (const [sel, list] of [['#gptSel', w.gpt], ['#sovitsSel', w.sovits]]) $(sel).innerHTML = list.map(x => `<option value="${esc(x)}">${esc(x.replace(/^GPT_SoVITS\/pretrained_models\//, '[预训练] '))}</option>`).join('');
+  fillForm();
+}
+async function loadDevices() {
+  const d = await api('/api/audio/devices');
+  $('#devSel').innerHTML = '<option value="">（系统默认）</option>' + d.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  fillForm();
+}
+async function loadConfig() { CFG = await api('/api/config'); fillForm(); }
+
+$$('[data-pick]').forEach(b => b.onclick = async () => {
+  const k = b.dataset.pick, r = await api('/api/pick', {kind: b.dataset.kind, initial: getPath(CFG, k) || ''});
+  if (r.path) { const el = $(`[data-k="${k}"]`); el.value = r.path; onField(el); if (k === 'tts.gsv_dir') setTimeout(loadWeights, 800); }
+});
+
+// ---------- 实时消息 ----------
+const feedEv = $('#feedEv'), feedRe = $('#feedRe');
+function addLine(box, html, cls = '') {
+  const stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+  const d = document.createElement('div'); d.className = 'it ' + cls; d.innerHTML = html; box.appendChild(d);
+  while (box.children.length > 400) box.firstChild.remove();
+  if (stick) box.scrollTop = box.scrollHeight;
+  return d;
+}
+const replyEls = {};
+function handle(m) {
+  switch (m.kind) {
+    case 'hello': m.history.forEach(handle); if (m.status) setStatus(m.status); break;
+    case 'status': setStatus(m.status); break;
+    case 'event': addLine(feedEv, `<span class="t">${m.t}</span><span class="tag ${m.type}">${esc(m.tname)}</span><span>${esc(m.desc)}${m.test ? ' <span class="hint">[模拟]</span>' : ''}${m.skip ? ` <span class="hint">· ${esc(m.skip)}</span>` : ''}</span>`, m.skip ? 'skip' : ''); break;
+    case 'reply': replyEls[m.id] = addLine(feedRe, `<span class="t">${m.t}</span><span class="tag ${m.type}">${m.type === 'manual' ? '手动' : '回复'}</span><span><span class="txt">${esc(m.text)}</span><br><span class="src">${esc(m.desc)} · ${esc(m.src)}${m.emotion ? ' · 表情：' + esc(m.emotion) : ''}</span></span>`, 'reply'); break;
+    case 'log': addLine(feedRe, `<span class="t">${m.t}</span><span class="tag ${m.level === 'info' ? 'log' : m.level}">${m.level === 'error' ? '错误' : m.level === 'warn' ? '提示' : '系统'}</span><span>${esc(m.msg)}</span>`); break;
+    case 'queue': $('#queueList').innerHTML = m.items.length ? '待回复：<br>' + m.items.map(esc).join('<br>') : ''; $('#s_queue').textContent = m.items.length; break;
+    case 'speak': $('#nowSpeaking').innerHTML = `🔊 ${esc(m.text)}${m.synth_s ? ` <span class="dim">（合成 ${m.synth_s}s）</span>` : ''}`; replyEls[m.id]?.classList.add('speaking'); break;
+    case 'speak_end': $('#nowSpeaking').innerHTML = '<span class="dim">当前没有在说话</span>'; replyEls[m.id]?.classList.remove('speaking'); break;
+    case 'songs': renderSongs(m); break;
+  }
+}
+function setStatus(s) {
+  const set = (id, v, cls) => { const e = $(id); e.textContent = v; e.className = 'v ' + (cls || ''); };
+  set('#s_bili', s.bili, s.bili.startsWith('已连接') ? 'ok' : s.bili.startsWith('连接中') ? 'warn' : 'bad');
+  set('#s_login', s.login, s.login === '未登录' ? 'warn' : 'ok');
+  $('#loginState').textContent = s.login === '未登录' ? '（未登录）' : `（已登录：${s.login}）`;
+  set('#s_ai', s.ai, 'ok');
+  set('#s_engine', s.engine, s.engine === '在线' || s.engine === '合成中' ? 'ok' : s.engine === '未启动' ? 'bad' : 'warn');
+  set('#s_paused', s.paused ? '已暂停' : '运行中', s.paused ? 'warn' : 'ok');
+  $('#pauseBtn').textContent = s.paused ? '恢复自动回复' : '暂停自动回复';
+  $('#pauseBtn').dataset.paused = s.paused ? '1' : '';
+  $('#s_queue').textContent = s.queue;
+}
+function connectWs() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { const b = $('#offlineBar'); if (b) b.remove(); };
+  ws.onmessage = e => handle(JSON.parse(e.data));
+  ws.onclose = () => {
+    setTimeout(() => {
+      if ($('#offlineBar')) return;
+      const d = document.createElement('div');
+      d.id = 'offlineBar';
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99;background:#f2545b;color:#fff;padding:8px 16px;font-weight:600;text-align:center';
+      d.textContent = '与程序失去连接（鲸语 WhaleTalk 可能已退出），请重新打开 WhaleTalk.exe';
+      document.body.appendChild(d);
+    }, 2000);
+    setTimeout(connectWs, 3000);
+  };
+}
+
+// ---------- 按钮 ----------
+$$('[data-act="connect"]').forEach(b => b.onclick = async () => { await api('/api/bili/connect', {}); toast('正在连接直播间…'); });
+$$('[data-act="disconnect"]').forEach(b => b.onclick = () => api('/api/bili/disconnect', {}));
+$$('[data-ctl]').forEach(b => b.onclick = () => api('/api/control', {action: b.dataset.ctl}));
+$('#pauseBtn').onclick = () => api('/api/control', {action: $('#pauseBtn').dataset.paused ? 'resume' : 'pause'});
+$('#sayBtn').onclick = async () => { const t = $('#sayText').value.trim(); if (t) { await api('/api/say', {text: t}); $('#sayText').value = ''; } };
+$('#sayAiBtn').onclick = async () => { const t = $('#sayText').value.trim(); if (!t) return; toast('AI 思考中…'); const r = await api('/api/say', {text: t, ai: true}); if (!r.ok) toast('失败：' + r.error); else $('#sayText').value = ''; };
+$('#sayText').onkeydown = e => { if (e.key === 'Enter') $('#sayBtn').click(); };
+$('#testBtn').onclick = () => api('/api/test_event', {type: $('#tType').value, name: $('#tName').value, text: $('#tText').value, gift: $('#tGift').value, num: +$('#tNum').value, value: +$('#tValue').value, price: +$('#tValue').value, guard: $('#tGuard').value});
+$('#aiTestBtn').onclick = async () => { $('#aiOut').textContent = '思考中…'; const r = await api('/api/ai/test', {prompt: $('#aiPrompt').value}); $('#aiOut').innerHTML = r.ok ? `<span style="color:var(--text)">${esc(r.text)}</span>（${r.seconds} 秒）` : `<span style="color:var(--red)">${esc(r.error)}</span>`; };
+$('#aiResetBtn').onclick = async () => { await api('/api/ai/reset', {}); toast('已清空 AI 记忆'); };
+$('#ttsTestBtn').onclick = async () => { await api('/api/say', {text: $('#ttsTest').value}); toast('已加入播放队列'); };
+$('#engStart').onclick = async () => { await api('/api/tts/start', {}); toast('正在启动引擎，进度看控制台'); };
+$('#engStop').onclick = async () => { const r = await api('/api/tts/stop', {}); toast(r.ok ? '已关闭引擎' : r.error); };
+$('#engLogBtn').onclick = async () => { const el = $('#engLog'); el.style.display = ''; el.textContent = await fetch('/api/tts/log').then(r => r.text()) || '（暂无日志：引擎可能不是由本软件启动的）'; el.scrollTop = el.scrollHeight; };
+$('#wRefresh').onclick = loadWeights; $('#devRefresh').onclick = loadDevices;
+$('#quitBtn').onclick = async () => { if (confirm('确定退出程序？')) { await api('/api/quit', {}); document.body.innerHTML = '<p style="padding:40px">程序已退出，可以关闭此窗口。</p>'; } };
+$('#cookieBtn').onclick = async () => { await api('/api/bili/cookie', {cookie: $('#cookieIn').value}); $('#cookieIn').value = ''; toast('已保存，正在重连'); loadConfig(); };
+$('#logoutBtn').onclick = async () => { if (confirm('退出B站登录？')) { await api('/api/bili/logout', {}); loadConfig(); } };
+let qrTimer = null;
+$('#qrBtn').onclick = async () => {
+  clearInterval(qrTimer);
+  const r = await api('/api/bili/qr', {});
+  $('#qrbox').style.display = 'flex'; $('#qrsvg').innerHTML = r.svg; $('#qrmsg').textContent = '请用B站手机客户端扫码';
+  qrTimer = setInterval(async () => {
+    const p = await api('/api/bili/qrpoll', {key: r.key});
+    $('#qrmsg').textContent = p.msg;
+    if (p.code === 0 || p.code === 86038) { clearInterval(qrTimer); if (p.code === 0) { setTimeout(() => $('#qrbox').style.display = 'none', 1500); loadConfig(); } }
+  }, 2000);
+};
+$('#ovUrl').value = `${location.origin}/overlay`;
+$('#ovCopy').onclick = () => { navigator.clipboard.writeText($('#ovUrl').value); toast('已复制'); };
+
+// ---------- 通用保存 ----------
+async function saveNow(patch, msg = '设置已保存') { deepMerge(CFG, patch); await api('/api/config', patch); toast(msg); }
+
+// ---------- Live2D ----------
+let L2D = {expressions: [], motions: [], model_files: []};
+async function loadL2d() {
+  L2D = await api('/api/l2d/info');
+  $('#l2dErr').textContent = L2D.error ? '　⚠ ' + L2D.error : '';
+  $('#l2dModelFile').innerHTML = L2D.model_files.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+  $('#l2dIdle').innerHTML = '<option value="">（无，保持静止）</option>' + L2D.motions.map(m => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
+  const base = CFG.live2d.base_expressions || [];
+  $('#l2dBase').innerHTML = L2D.expressions.map(e => `<label class="c"><input type="checkbox" data-base="${esc(e.id)}" ${base.includes(e.id) ? 'checked' : ''}>${esc(e.label)}</label>`).join('') || '<span class="hint">（没有找到表情文件）</span>';
+  $('#l2dExprBtns').innerHTML = L2D.expressions.map(e => `<span class="btn sm" data-texpr="${esc(e.id)}">${esc(e.label)}</span>`).join('');
+  $('#l2dMotionBtns').innerHTML = L2D.motions.map(m => `<span class="btn sm" data-tmotion="${esc(m.id)}">${esc(m.label)}</span>`).join('') || '<span class="hint">（无）</span>';
+  renderEmotions(); renderFixed(); fillForm();
+}
+function renderEmotions() {
+  const emos = CFG.live2d.emotions || [];
+  const exprIds = L2D.expressions.map(e => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join('');
+  $('#emoList').innerHTML = `<datalist id="exprIds">${exprIds}</datalist>` + emos.map((e, i) => `<div class="row emo">
+    <input data-ef="name" value="${esc(e.name)}" style="width:90px" placeholder="情绪名">
+    <input data-ef="expressions" value="${esc((e.expressions || []).join(','))}" list="exprIds" placeholder="表情（逗号分隔）" style="flex:1.2;min-width:120px">
+    <select data-ef="motion" style="width:180px"><option value="">（无动作）</option>${L2D.motions.map(m => `<option value="${esc(m.id)}" ${m.id === e.motion ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select>
+    <input data-ef="keywords" value="${esc(e.keywords || '')}" placeholder="关键词（模板/固定回复用来判断情绪）" style="flex:1.6;min-width:140px">
+    <span class="btn sm" data-etest="${i}">试</span><span class="btn sm r" data-edel="${i}">删</span></div>`).join('');
+}
+const collectEmotions = () => $$('#emoList .emo').map(r => ({
+  name: r.querySelector('[data-ef=name]').value.trim(),
+  expressions: r.querySelector('[data-ef=expressions]').value.split(/[,，]/).map(s => s.trim()).filter(Boolean),
+  motion: r.querySelector('[data-ef=motion]').value,
+  keywords: r.querySelector('[data-ef=keywords]').value}));
+async function saveEmotions(list) { await saveNow({live2d: {emotions: list}}); renderEmotions(); renderFixed(); }
+
+// ---------- 固定回复 ----------
+function renderFixed() {
+  const emos = CFG.live2d.emotions || [];
+  $('#fixedList').innerHTML = (CFG.fixed_replies || []).map((r, i) => `<div class="card fx">
+    <div class="row">
+      <label class="c" style="margin-top:18px"><input type="checkbox" data-ff="enabled" ${r.enabled !== false ? 'checked' : ''}>启用</label>
+      <label class="f">关键词（逗号分隔）<input data-ff="keywords" value="${esc(r.keywords)}"></label>
+      <label class="f" style="max-width:130px">匹配方式<select data-ff="match">${[['contains', '包含'], ['exact', '完全一致'], ['regex', '正则']].map(([v, l]) => `<option value="${v}" ${r.match === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="f" style="max-width:150px">表情<select data-ff="emotion"><option value="">（按关键词判断）</option>${emos.map(e => `<option ${e.name === r.emotion ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></label>
+      <span class="btn sm r" data-fdel="${i}" style="margin-top:18px">删除</span>
+    </div>
+    <label class="f">回复（每行一条，随机选一行）<textarea data-ff="reply">${esc(r.reply)}</textarea></label></div>`).join('') || '<div class="card hint">还没有固定回复，点下面添加。</div>';
+}
+const collectFixed = () => $$('#fixedList .fx').map(r => ({
+  enabled: r.querySelector('[data-ff=enabled]').checked, keywords: r.querySelector('[data-ff=keywords]').value.trim(),
+  match: r.querySelector('[data-ff=match]').value, emotion: r.querySelector('[data-ff=emotion]').value,
+  reply: r.querySelector('[data-ff=reply]').value}));
+
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.base !== undefined) saveNow({live2d: {base_expressions: $$('[data-base]').filter(x => x.checked).map(x => x.dataset.base)}});
+  else if (t.dataset.ef) saveNow({live2d: {emotions: collectEmotions()}}).then(renderFixed);
+  else if (t.dataset.ff) saveNow({fixed_replies: collectFixed()});
+  else if (t.dataset.k === 'live2d.enabled' && t.checked) { const b = $('[data-k="live2d.bubble"]'); if (!b.checked) { b.checked = true; onField(b); } }
+  else if (t.dataset.k === 'live2d.model_dir') setTimeout(loadL2d, 900);
+});
+document.addEventListener('click', e => {
+  const d = e.target.dataset || {};
+  if (d.texpr) api('/api/l2d/test', {expressions: [d.texpr]});
+  else if (d.tmotion) api('/api/l2d/test', {motion: d.tmotion});
+  else if (d.etest !== undefined) { const em = collectEmotions()[+d.etest]; api('/api/l2d/test', {expressions: em.expressions, motion: em.motion, text: `（${em.name}）`}); }
+  else if (d.edel !== undefined) { const l = collectEmotions(); l.splice(+d.edel, 1); saveEmotions(l); }
+  else if (d.fdel !== undefined) { const l = collectFixed(); l.splice(+d.fdel, 1); saveNow({fixed_replies: l}).then(renderFixed); }
+  else if (d.copy) { navigator.clipboard.writeText($(d.copy).value); toast('已复制'); }
+});
+$('#emoAdd').onclick = () => saveEmotions([...collectEmotions(), {name: '新情绪', expressions: [], motion: '', keywords: ''}]);
+$('#fixedAdd').onclick = () => saveNow({fixed_replies: [...collectFixed(), {enabled: true, keywords: '', match: 'contains', reply: '', emotion: ''}]}).then(renderFixed);
+$('#l2dUrl').value = `${location.origin}/live2d`;
+$('#l2dPreview').onclick = () => window.open('/live2d?bg=303848', 'l2dprev', 'width=900,height=900');
+$('#l2dBubbleBtn').onclick = () => api('/api/l2d/test', {text: $('#l2dBubbleTest').value});
+
+// ---------- 模型列表 ----------
+$$('[data-listmodels]').forEach(b => b.onclick = async () => {
+  const k = b.dataset.listmodels, hint = $(`[data-modelhint="${k}"]`), box = $(`[data-modellist="${k}"]`);
+  hint.style.color = ''; hint.textContent = '查询中…'; box.innerHTML = '';
+  const r = await api('/api/ai/models');
+  if (!r.ok) { hint.style.color = 'var(--red)'; hint.textContent = r.error; return; }
+  hint.textContent = `共 ${r.models.length} 个，点一下即切换：`;
+  const curModel = $(`[data-k="${k}"]`).value;
+  box.innerHTML = r.models.map(m => `<span class="btn sm${m === curModel ? ' p' : ''}" data-pickmodel="${esc(m)}" data-for="${k}">${esc(m)}</span>`).join('');
+});
+document.addEventListener('click', e => {
+  const m = e.target.dataset?.pickmodel;
+  if (m === undefined) return;
+  const el = $(`[data-k="${e.target.dataset.for}"]`); el.value = m; onField(el);
+  $$(`[data-for="${e.target.dataset.for}"]`).forEach(x => x.classList.toggle('p', x === e.target));
+});
+
+// ---------- 点歌 ----------
+const SG_TPL = [['add', '点歌成功'], ['similar', '找到相似版本'], ['pin', '插队成功'], ['play', '开始播放'], ['fail', '没找到歌'], ['need', '没有点歌券'], ['full', '歌单排满']];
+$('#sgTpl').innerHTML = SG_TPL.map(([k, l]) => `<div class="row"><label class="c" style="width:130px"><input type="checkbox" data-k="songs.announce_${k}">${l}</label><input data-k="songs.tpl_${k}" style="flex:1"></div>`).join('');
+const fmtT = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+function renderSongs(st) {
+  const c = st.current;
+  $('#sgNow').innerHTML = c ? `${c.paused ? '⏸' : '🎵'} ${esc(c.name)} - ${esc(c.artist)} <span class="dim">点歌：${esc(c.by)}　${fmtT(c.pos)} / ${fmtT(c.total)}</span>` : '<span class="dim">现在没有在放歌</span>';
+  $('#sgPause').textContent = c?.paused ? '继续' : '暂停';
+  $('#sgPause').dataset.paused = c?.paused ? '1' : '';
+  $('#sgQueue').innerHTML = st.queue.length ? st.queue.map((s, i) => `<div class="row" style="margin-bottom:4px">
+      <b style="width:22px;color:var(--pink)">${i + 1}</b>
+      <span style="flex:1">${s.pinned ? '<span class="tag guard">插队</span> ' : ''}${esc(s.name)} - ${esc(s.artist)} <span class="hint">· ${esc(s.by)}${s.similar ? ' · 相似匹配（点的是“' + esc(s.query) + '”）' : ''}</span></span>
+      <span class="btn sm" data-sgq="up" data-qid="${s.qid}">↑</span><span class="btn sm" data-sgq="down" data-qid="${s.qid}">↓</span>
+      <span class="btn sm" data-sgq="${s.pinned ? 'unpin' : 'pin'}" data-qid="${s.qid}">${s.pinned ? '取消置顶' : '置顶'}</span>
+      <span class="btn sm r" data-sgq="remove" data-qid="${s.qid}">删除</span></div>`).join('') : '<span class="hint">歌单是空的</span>';
+  $('#sgCredits').innerHTML = st.credits.length ? st.credits.map(r => `<div class="row" style="margin-bottom:4px;color:var(--text)">
+      <span style="flex:1">${esc(r.name)}</span><span style="width:110px">点歌券 <b>${r.song}</b></span><span style="width:110px">插队券 <b>${r.pin}</b></span>
+      <span class="btn sm" data-give="${esc(r.key)}" data-gs="1">+点歌</span><span class="btn sm" data-give="${esc(r.key)}" data-gp="1">+插队</span><span class="btn sm r" data-give="${esc(r.key)}" data-gs="-99" data-gp="-99">清零</span></div>`).join('') : '暂无';
+  const a = st.account;
+  $('#neState').textContent = a ? `（已登录：${a.nickname}${a.vip ? ' · VIP' : ' · 非VIP'}）` : (CFG.songs?._ne_logged_in ? '（登录已失效，请重新登录）' : '（未登录）');
+}
+document.addEventListener('click', async e => {
+  const d = e.target.dataset || {};
+  if (d.sg) api('/api/songs/control', {action: d.sg});
+  else if (d.sgq) api('/api/songs/control', {action: d.sgq, qid: +d.qid});
+  else if (d.give) api('/api/songs/give', {key: d.give, song: +(d.gs || 0), pin: +(d.gp || 0)});
+  else if (d.addsong) { await api('/api/songs/add', {song: JSON.parse(d.addsong)}); toast('已加入歌单'); }
+});
+$('#sgPause').onclick = () => api('/api/songs/control', {action: $('#sgPause').dataset.paused ? 'resume' : 'pause'});
+$('#sgSearch').onclick = async () => {
+  const q = $('#sgQ').value.trim(); if (!q) return;
+  $('#sgResults').textContent = '搜索中…';
+  const r = await api('/api/songs/search', {q});
+  if (!r.ok) { $('#sgResults').textContent = r.error; return; }
+  $('#sgResults').innerHTML = r.songs.map(s => `<div class="row" style="margin-bottom:4px"><span style="flex:1">${esc(s.name)} - ${esc(s.artist)} <span class="hint">${fmtT(s.dur)}</span></span>${s.playable ? `<span class="btn sm p" data-addsong="${esc(JSON.stringify(s))}">加入</span>` : '<span class="hint">不能播放</span>'}</div>`).join('') || '没有结果';
+};
+$('#sgQ').onkeydown = e => { if (e.key === 'Enter') $('#sgSearch').click(); };
+let neTimer = null;
+$('#neQrBtn').onclick = async () => {
+  clearInterval(neTimer);
+  const r = await api('/api/songs/qr', {});
+  $('#neQrBox').style.display = 'flex'; $('#neQrSvg').innerHTML = r.svg; $('#neQrMsg').textContent = '请用网易云音乐手机 App 扫码';
+  neTimer = setInterval(async () => {
+    const p = await api('/api/songs/qrpoll', {key: r.key});
+    $('#neQrMsg').textContent = p.msg;
+    if (p.code === 803 || p.code === 800) { clearInterval(neTimer); if (p.code === 803) { setTimeout(() => $('#neQrBox').style.display = 'none', 1500); loadConfig(); } }
+  }, 2000);
+};
+$('#neCookieBtn').onclick = async () => { const r = await api('/api/songs/cookie', {cookie: $('#neCookie').value}); $('#neCookie').value = ''; toast(r.account ? '登录成功：' + r.account.nickname : 'Cookie 无效'); loadConfig(); };
+$('#neLogout').onclick = async () => { if (confirm('退出网易云登录？')) { await api('/api/songs/cookie', {cookie: ''}); loadConfig(); } };
+$('#sgUrl').value = `${location.origin}/songs`;
+
+loadConfig().then(() => { loadWeights(); loadDevices(); loadL2d(); api('/api/songs/state').then(renderSongs); });
+connectWs();
+</script>
+</body>
+</html>

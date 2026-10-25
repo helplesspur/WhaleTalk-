@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="300" viewBox="0 0 1280 300" role="img" aria-label="鲸语 WhaleTalk">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#121826"/>
+      <stop offset="0.55" stop-color="#1b2743"/>
+      <stop offset="1" stop-color="#2a1d3a"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8fd3ff"/>
+      <stop offset="1" stop-color="#fb7299"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#23ade5" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#23ade5" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="300" fill="url(#bg)"/>
+  <circle cx="1010" cy="150" r="210" fill="url(#glow)"/>
+  <g opacity="0.9">
+    <path d="M905 175c0-38 31-68 70-68 20 0 37 8 50 21 10-5 21-8 33-8 25 0 46 12 58 31 6-2 12-3 19-3 27 0 49 20 49 45s-22 45-49 45H960c-30 0-55-22-55-49z" fill="#3b6ea8" opacity="0.55"/>
+    <circle cx="1032" cy="168" r="4.5" fill="#e9f6ff"/>
+    <path d="M978 96c14-18 30-26 46-26 12 0 22 4 30 11-12 3-22 9-30 18-12 14-20 28-24 44-10-14-18-30-22-47z" fill="#7fb6e8" opacity="0.8"/>
+    <path d="M1160 150c18-10 34-12 50-6-10 16-24 28-42 34-6-9-9-19-8-28z" fill="#7fb6e8" opacity="0.7"/>
+    <path d="M905 232c22 8 44 12 66 12 46 0 88-14 122-38" stroke="#8fd3ff" stroke-width="3" fill="none" opacity="0.35" stroke-linecap="round"/>
+  </g>
+  <g font-family="Microsoft YaHei UI, PingFang SC, Noto Sans CJK SC, sans-serif">
+    <text x="80" y="132" font-size="86" font-weight="700" fill="url(#ink)" letter-spacing="6">鲸语</text>
+    <text x="86" y="196" font-size="40" font-weight="600" fill="#e8eefc" letter-spacing="2">WhaleTalk</text>
+    <text x="88" y="240" font-size="21" fill="#93a4c4" letter-spacing="1">B 站直播 · AI 回复 · GPT-SoVITS 语音 · Live2D 皮套 · 点歌</text>
+  </g>
+  <rect x="80" y="258" width="330" height="2" fill="url(#ink)" opacity="0.5"/>
+</svg>

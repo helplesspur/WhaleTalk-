@@ -1,0 +1,36 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Build output
+build/
+dist/
+*.spec
+release/
+
+# Local settings & runtime data (contain login cookies!)
+config.json
+config.json.bak
+logs/
+qoder_workdir/
+
+# Media / model weights / datasets (never commit)
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.ckpt
+*.pth
+*.onnx
+*.safetensors
+*.exp3.json
+*.moc3
+*.model3.json
+*.physics3.json
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,249 @@
+<p align="center"><img src="docs/banner.svg" alt="鲸语 WhaleTalk" width="100%"></p>
+
+# 鲸语 WhaleTalk
+
+> 把 B 站直播间变成会说话、有表情的 AI 主播。
+> 读弹幕 → Qoder 大模型写回复 → GPT-SoVITS 合成语音 → Live2D 皮套对口型播放，还能点歌。
+
+鲸语（WhaleTalk）是一个跑在 Windows 本机的开源直播助手：
+
+- 实时读取 B 站直播间的 **进房 / 弹幕 / 礼物 / 上舰 / 醒目留言 / 关注 / 点赞**
+- 交给 **Qoder 大模型**（或任意 OpenAI 兼容接口、或固定模板）生成口语回复
+- 用本机 **GPT-SoVITS** 合成你的音色，直接播放，并驱动 **Live2D** 皮套对口型、换表情
+- 自动把回复显示成 **皮套头顶的气泡**，或输出到 OBS 字幕源
+- **点歌**：送指定礼物领点歌券，弹幕 `点歌:歌名` 自动搜索网易云并排队播放，送插队礼物可置顶
+- 完整可配置：每种事件单独开关、冷却、合并、模板、情绪映射……
+
+> 名字里的「鲸」来自默认参考皮套 DS 鲸鱼娘（皮套不随仓库分发，见下文），「语」是它替你说出口的话。
+
+<p align="center">中文 · <a href="#english">English</a></p>
+
+---
+
+## 目录
+
+- [功能](#功能)
+- [它是怎么工作的](#它是怎么工作的)
+- [快速开始](#快速开始)
+- [在直播软件里使用](#在直播软件里使用)
+- [点歌](#点歌)
+- [Live2D 皮套与气泡](#live2d-皮套与气泡)
+- [配置说明](#配置说明)
+- [常见问题](#常见问题)
+- [从源码运行 / 打包](#从源码运行--打包)
+- [仓库里没有什么](#仓库里没有什么)
+- [合规与致谢](#合规与致谢)
+
+---
+
+## 功能
+
+| 模块 | 说明 |
+|---|---|
+| 弹幕读取 | 通过 B 站直播 WebSocket 实时接收进房、弹幕、礼物、上舰、醒目留言、关注、点赞；扫码登录后观众名字不再打码 |
+| AI 回复 | 默认调用 Qoder CLI（你 Qoder 账号的额度，常驻会话会记得上下文）；也可切到 OpenAI 兼容 API；AI 出错自动退回模板 |
+| 语音合成 | 本机 GPT-SoVITS（v2Pro / 微调模型均可），自动启动引擎、切换权重、按音量包络驱动口型 |
+| Live2D 皮套 | 浏览器源输出透明背景；自动呼吸/眨眼，说话时对口型，按回复内容自动切换表情与动作 |
+| 气泡字幕 | 皮套头顶气泡，大小随文字自适应、逐字显示；OBS 字幕页可选 |
+| 点歌 | 网易云搜索 + 可播放判断 + 相似版本回退；点歌券/插队券；歌单队列与置顶；说话时自动压低音乐 |
+| 固定回复 | 弹幕命中关键词直接念固定内容，可指定表情，不消耗 AI |
+| 情绪系统 | AI 自己为回复挑一个情绪（开心/感谢/害羞/惊讶…），模板与固定回复按关键词判断 |
+| 群控细节 | 礼物连击合并、多人进房合并、同观众冷却、屏蔽词、优先级队列、过期消息丢弃 |
+| 界面 | 本机网页界面（Edge 应用窗口），所有设置即时保存；日志实时显示 |
+
+## 它是怎么工作的
+
+```
+┌─────────────┐   WebSocket    ┌──────────────┐   过滤/合并/排队   ┌───────────────┐
+│ B 站直播间  │ ─────────────► │  bili.py     │ ─────────────────► │ pipeline.py   │
+└─────────────┘                └──────────────┘                    └───────┬───────┘
+                                                                          │ 事件
+                                        ┌─────────────────────────────────┤
+                                        ▼                                 ▼
+                                 ┌─────────────┐                   ┌─────────────┐
+                                 │ songs.py    │                   │ brain.py    │
+                                 │ 网易云点歌  │                   │ Qoder / API │
+                                 └──────┬──────┘                   └──────┬──────┘
+                                        │ 音乐                            │ 文本+情绪
+                                        ▼                                 ▼
+                                 ┌─────────────────────────────────────────────┐
+                                 │ tts.py  GPT-SoVITS 合成 + 混音播放器        │
+                                 │ （音乐与语音同一条音频流，说话时压低音乐）  │
+                                 └──────────────────┬──────────────────────────┘
+                                                    │ speak / envelope / emotion
+                                    ┌───────────────┴───────────────┐
+                                    ▼                               ▼
+                          ┌──────────────────┐            ┌──────────────────┐
+                          │ web/live2d.html  │            │ web/songs.html   │
+                          │ 皮套 · 口型 · 气泡│            │ OBS 歌单         │
+                          └──────────────────┘            └──────────────────┘
+```
+
+所有页面都是本机 `127.0.0.1:8787` 上的普通网页，通过 WebSocket 接收同一个事件流，所以可以同时开在 OBS、直播姬和浏览器预览里，互不干扰。
+
+## 快速开始
+
+> 目前仅支持 Windows 10/11 + NVIDIA 显卡（GPT-SoVITS 需要 CUDA）。CPU 也能跑，但合成会慢很多。
+
+### 需要准备
+
+1. **Qoder**：登录 [Qoder](https://qoder.com)，安装 Qoder CLI 并登录
+   ```powershell
+   irm https://qoder.com/install.ps1 | iex
+   qodercli login
+   ```
+   （也可以在软件目录双击 `qoder_login.bat`；不想用 Qoder 就在设置里切到 OpenAI 兼容接口。）
+2. **GPT-SoVITS**：下载官方 Windows 整合包（本项目只调用它的 `api_v2.py`），例如 `GPT-SoVITS-v2pro-*`
+3. **参考音频**：3~10 秒干净人声 + 一字不差的文字；或自己微调的 GPT/SoVITS 权重
+4. **Live2D 模型**（可选）：Cubism 3/4 的 `.model3.json` 模型，VTube Studio 用的那种即可
+
+### 三步跑起来
+
+1. 启动 `WhaleTalk.exe`（会打开黑色控制台窗口 + 软件界面窗口）
+2. 在【语音设置】选 **GPT-SoVITS 目录**、**参考音频**、**参考音频文本**，点【试听】
+3. 在【直播间 / 登录】填房间号 →【扫码登录】B 站（建议小号，仅用于拿观众昵称）
+
+之后软件会自动连接直播间、启动语音引擎、预热 AI 会话。
+【控制台】右下角的“模拟测试”不需要真实观众就能试全流程。
+
+## 在直播软件里使用
+
+| 用途 | 浏览器源地址 | 建议尺寸 |
+|---|---|---|
+| Live2D 皮套 | `http://127.0.0.1:8787/live2d` | 1080×1080，背景透明 |
+| 头顶气泡 | （包含在皮套页里） | — |
+| 点歌列表 | `http://127.0.0.1:8787/songs` | 540×480，背景透明 |
+| 纯字幕 | `http://127.0.0.1:8787/overlay` | 1280×200，背景透明 |
+
+- 直播软件不支持透明网页时，用绿幕再抠像：`/live2d?bg=00ff00`
+- 软件退出或被结束后，这些页面会自动隐藏（正常退出立即隐藏，强制结束最多 5 秒）
+- 声音由本程序播放，直播软件开启“桌面音频/系统声音”采集即可
+
+## 点歌
+
+1. 观众送**点歌礼物**（默认：小花花）→ 获得点歌券
+2. 观众发弹幕 `点歌:歌名`（也支持 `点歌 歌名 歌手`）
+3. 程序搜索网易云：原版能播就播原版，否则自动挑一首能完整播放的相似版本并播报
+4. 送**插队礼物**（默认：人气票）→ 他排队中的歌立刻置顶；还没点歌的话下一首直接置顶
+
+在【点歌】页可以改礼物名与数量、上限、音量、压低比例、播报文案，也能暂停/切歌/调序/删除、手动点歌、给观众补券。
+登录**网易云账号**（扫码或粘贴 `MUSIC_U`）后，VIP 歌曲也能完整播放。
+
+## Live2D 皮套与气泡
+
+- 默认“站着不动”，只保留呼吸与眨眼；可另开“头部轻微摆动”和“待机动作”
+- 说话时按真实音量张开嘴，句末自然闭合
+- 回复的**情绪**会映射到表情/动作，映射表可增删改，所有表情动作都能一键试播
+- 气泡位置、字号、宽度、配色、停留时间均可调
+
+表情建议这样配（默认已配好一套）：
+
+| 情绪 | 表情 | 触发倾向 |
+|---|---|---|
+| 开心 | 开心兴奋 | 哈哈、太好了、欢迎 |
+| 感谢 | 爱心眼 | 谢谢、礼物、上舰 |
+| 害羞 | 脸红 | 被夸、不好意思 |
+| 惊讶 | 感叹号 | 哇、居然、上舰 |
+| 调皮 | 吐舌 + 泡泡糖动作 | 嘿嘿、才不 |
+| 疑惑 | 问号 | 为什么、咦 |
+
+## 配置说明
+
+所有设置都在界面上，保存在软件目录的 `config.json`（含 B 站/网易云登录信息，**不要外传**）。
+重点项：
+
+| 位置 | 项目 |
+|---|---|
+| 直播间 / 登录 | 房间号、自动连接、B 站扫码登录 |
+| 回复规则 | 每种事件的开关、AI/模板、冷却、合并窗口、触发词、概率、模板变量 |
+| 固定回复 | 关键词 → 固定话术（包含/完全一致/正则），可指定表情 |
+| 点歌 | 礼物换券、上限、音量与压低、播报文案、网易云登录 |
+| AI 设置 | 后端、模型（可一键列出账号可用模型）、人设、字数上限、会话重开频率 |
+| 语音设置 | 引擎目录/地址、GPT/SoVITS 权重、参考音频与文本、语速、采样步数、输出设备、音量 |
+| Live2D 皮套 | 模型、位置缩放、呼吸/眨眼/摆动/口型、常驻表情、情绪映射、气泡样式 |
+
+模板变量：`{name}` `{text}` `{gift}` `{num}` `{value}` `{guard}` `{price}`；点歌播报另有 `{song}` `{artist}` `{pos}` `{query}`。
+
+## 常见问题
+
+- **回复全是模板？** 看“AI 回复”里的来源与原因；多数是 Qoder CLI 未登录（运行 `qoder_login.bat`）
+- **没声音？** 语音引擎是否“在线”、参考音频是否选、音量是否为 0、输出设备是否正确
+- **观众名字是“新朋友”？** 未登录 B 站时名字被打码；扫码登录即可
+- **B 站登录显示无效？** 看控制台里的提示（如 `-101 账号未登录` 表示 Cookie 过期）
+- **点歌放的不是原唱？** 原版无版权/需 VIP 时会自动找相似版本；登录网易云 VIP 后可放原版
+- **关掉程序画面还留着？** 新版会自动隐藏；若仍残留，刷新直播软件里的浏览器源
+
+更多见 [docs/使用教程.md](docs/使用教程.md)。
+
+## 从源码运行 / 打包
+
+```powershell
+# Python 3.12
+uv venv --python 3.12 .venv
+.venv\Scripts\pip install -r requirements.txt
+
+.venv\Scripts\python main.py          # 直接运行
+build.bat                              # 打包成 dist\WhaleTalk.exe（需要 requirements-dev.txt）
+```
+
+首次运行会在同目录生成 `config.json` 与 `logs/`。
+`tools/train_voice.py` 是用 GPT-SoVITS 官方脚本微调音色的批处理封装（准备 `metadata.csv` + 音频即可）。
+
+代码地图：
+
+| 文件 | 职责 |
+|---|---|
+| `main.py` | 入口、网页服务与全部 HTTP 接口 |
+| `bili.py` | B 站弹幕连接、扫码登录 |
+| `pipeline.py` | 事件过滤、合并、优先级队列、生成→合成→播放流水线 |
+| `brain.py` | Qoder CLI 常驻会话 / OpenAI 兼容 / 模板 / 情绪标签 |
+| `tts.py` | GPT-SoVITS 引擎管理、合成、混音播放器、口型包络 |
+| `songs.py` / `netease.py` | 点歌逻辑 / 网易云接口 |
+| `live2d.py` | 模型文件与表情动作列表 |
+| `web/` | 界面、皮套、歌单、字幕页面（含 vendor 渲染库） |
+
+## 仓库里没有什么
+
+为尊重版权与隐私，仓库**不包含**：
+
+- Live2D 皮套模型（DS 鲸鱼娘版权归原作者，请自行准备模型）
+- GPT-SoVITS 权重、参考音频、训练数据
+- 任何 B 站/网易云 Cookie 或 API Key（`config.json` 已加入 `.gitignore`）
+
+## 合规与致谢
+
+使用本软件即表示你了解并自行承担以下事项：
+
+- **AI 合成语音**请向观众说明；不要克隆未授权的声音
+- 直播中公开播放音乐需遵守平台规范与版权要求
+- B 站、网易云接口均为非官方接口，可能随平台调整失效；请合理控制请求频率
+- 第三方组件许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)，其中 **Live2D Cubism Core 是 Live2D 公司的专有软件**（随应用分发），**不是** MIT
+
+特别感谢：
+
+- [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) —— 语音合成引擎
+- [blivedm](https://github.com/xfgryujk/blivedm) —— B 站弹幕库（MIT，已内置于 `blivedm/`）
+- [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) / [lipsyncpatch](https://github.com/RaSan147/pixi-live2d-display) —— Live2D 网页渲染（MIT）
+- [PixiJS](https://pixijs.com/) —— 2D 渲染（MIT）
+- [Qoder](https://qoder.com) —— 大模型与 CLI
+- [dsh-gpt-sovits](https://github.com/91koukou/dsh-gpt-sovits) —— GPT-SoVITS 接入思路与踩坑记录
+- 音色数据集《大肥鱼（自调少女音色）中文语音数据集》—— 尹紫鹭幻想社（Bilibili），CC BY-NC 4.0（仅作示例，不随仓库分发）
+
+## License
+
+代码以 [MIT](LICENSE) 发布。第三方组件、Live2D Core、平台接口与素材的许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+
+---
+
+<a id="english"></a>
+
+## English (short)
+
+**WhaleTalk** is a local Windows live-streaming assistant for Bilibili: it reads danmaku/gift/guard events,
+generates replies with the Qoder LLM (or any OpenAI-compatible API), speaks them with your own GPT-SoVITS
+voice, drives a Live2D avatar with lip-sync and emotion-based expressions, shows replies in a speech bubble,
+and supports gift-gated song requests from NetEase Cloud Music.
+
+Everything runs on `127.0.0.1` and outputs plain web pages, so you can add them to OBS / Bilibili Live Studio
+as browser sources. The repo ships **no** Live2D models, voice weights, datasets or cookies. Code is MIT;
+see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for bundled third-party licenses (Live2D Cubism Core is proprietary).

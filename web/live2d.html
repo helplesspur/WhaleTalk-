@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>鲸语 · Live2D</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:transparent;font-family:"Microsoft YaHei UI","PingFang SC",sans-serif}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+#bubble{position:fixed;left:0;top:0;opacity:0;transform:scale(.85);transition:opacity .25s,transform .25s;pointer-events:none;
+  padding:14px 20px;border-radius:20px;border:3px solid #fb7299;background:#fff;color:#333;font-weight:700;line-height:1.45;
+  box-shadow:0 6px 18px rgba(0,0,0,.25);word-break:break-word;white-space:pre-wrap;box-sizing:border-box}
+#bubble.on{opacity:1;transform:scale(1)}
+#bubble::before,#bubble::after{content:"";position:absolute;width:0;height:0;border-style:solid}
+#bubble::before{bottom:-21px;left:26px;border-width:21px 12px 0 12px;border-color:var(--bd) transparent transparent transparent}
+#bubble::after{bottom:-15px;left:29px;border-width:16px 9px 0 9px;border-color:var(--bg) transparent transparent transparent}
+#bubble.flip::before{left:auto;right:26px}#bubble.flip::after{left:auto;right:29px}
+#bubble .hid{visibility:hidden}
+#err{position:fixed;left:8px;top:8px;color:#f2545b;font-size:14px;text-shadow:0 1px 2px #000}
+html.off body{visibility:hidden}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="bubble"><span class="shown"></span><span class="hid"></span></div>
+<div id="err"></div>
+<script src="/static/vendor/live2dcubismcore.min.js"></script>
+<script src="/static/vendor/pixi.min.js"></script>
+<script src="/static/vendor/cubism4.min.js"></script>
+<script>
+const qs = new URLSearchParams(location.search);
+if (qs.get('bg')) document.body.style.background = (qs.get('bg').startsWith('#') ? '' : '#') + qs.get('bg');
+const MOUTH_IDS = ['ParamMouthOpenY', 'PARAM_MOUTH_OPEN_Y'];
+const FADE = 0.35;
+PIXI.live2d.Live2DModel.registerTicker(PIXI.Ticker);
+const app = new PIXI.Application({view: document.getElementById('c'), resizeTo: window, backgroundAlpha: 0, antialias: true, autoDensity: true, resolution: window.devicePixelRatio || 1});
+const bubble = document.getElementById('bubble'), errBox = document.getElementById('err');
+
+let CFG = null, INFO = null, model = null, baseW = 1, baseH = 1, modelKey = '';
+const exprData = {};          // id -> exp3 json
+let active = [];              // {id, w, target, base}
+let mouth = 0, env = null, envStart = 0, envFps = 30, fakeMouth = false;
+let clearTimer = null, bubbleTimer = null, typeTimer = null, speakId = null;
+
+async function fetchInfo() {
+  INFO = await fetch('/api/l2d/info').then(r => r.json());
+  CFG = INFO.cfg;
+}
+
+async function loadExpr(id) {
+  if (exprData[id]) return exprData[id];
+  const e = INFO.expressions.find(x => x.id === id);
+  if (!e) return null;
+  try { exprData[id] = await fetch('/l2d/model/' + encodeURI(e.file)).then(r => r.json()); } catch { return null; }
+  return exprData[id];
+}
+
+async function loadModel() {
+  errBox.textContent = '';
+  if (model) { app.stage.removeChild(model); model.destroy(); model = null; }
+  active = [];
+  for (const k in exprData) delete exprData[k];
+  if (!CFG.enabled) return;
+  if (INFO.error) { errBox.textContent = 'Live2D：' + INFO.error; return; }
+  try {
+    model = await PIXI.live2d.Live2DModel.from('/l2d/model/auto.model3.json?t=' + Date.now(), {autoHitTest: false, autoFocus: false});
+  } catch (e) { errBox.textContent = 'Live2D 模型加载失败：' + e; return; }
+  const im = model.internalModel;
+  im.lipSync = false;
+  if (!CFG.blink) im.eyeBlink = undefined;
+  im.breath = {updateParameters: frame};
+  baseW = model.width; baseH = model.height;
+  app.stage.addChild(model);
+  for (const id of CFG.base_expressions || []) if (await loadExpr(id)) active.push({id, w: 1, target: 1, base: true});
+  layout();
+}
+
+function layout() {
+  if (!model) return;
+  const W = innerWidth, H = innerHeight, s = (CFG.scale || 1) * H / baseH;
+  model.scale.set(s);
+  model.anchor.set(0.5, 1);
+  model.position.set(W * (CFG.x ?? 0.5), H * (1 + (CFG.y || 0)));
+  styleBubble();
+  placeBubble();
+}
+
+// ---------- 每帧参数（在物理演算之前执行，头发会跟着动） ----------
+function frame(core, dt) {
+  const t = performance.now() / 1000;
+  if (CFG.breath) core.setParameterValueById('ParamBreath', (Math.sin(t * 2 * Math.PI / 3.4) + 1) / 2);
+  if (CFG.sway) {
+    core.addParameterValueById('ParamAngleX', Math.sin(t * 2 * Math.PI / 6.5) * 4);
+    core.addParameterValueById('ParamAngleZ', Math.sin(t * 2 * Math.PI / 8.3) * 2);
+    core.addParameterValueById('ParamBodyAngleX', Math.sin(t * 2 * Math.PI / 7.1) * 2);
+  }
+  const step = Math.min(1, dt / FADE);
+  for (const a of active) {
+    a.w = a.target > a.w ? Math.min(a.target, a.w + step) : Math.max(a.target, a.w - step);
+    const d = exprData[a.id];
+    if (!d || a.w <= 0) continue;
+    for (const p of d.Parameters || []) {
+      const b = p.Blend || 'Add';
+      if (b === 'Multiply') core.multiplyParameterValueById(p.Id, p.Value, a.w);
+      else if (b === 'Overwrite') core.setParameterValueById(p.Id, p.Value, a.w);
+      else core.addParameterValueById(p.Id, p.Value, a.w);
+    }
+  }
+  active = active.filter(a => a.target > 0 || a.w > 0);
+  if (CFG.lipsync) {
+    let v = 0;
+    if (env) { const i = Math.floor((performance.now() - envStart) / 1000 * envFps); v = i < env.length ? env[i] : 0; }
+    else if (fakeMouth) v = (Math.sin(t * 17) + 1) / 2 * 0.8;
+    mouth += (Math.min(1, v * (CFG.lip_gain || 1)) - mouth) * Math.min(1, dt * 18);
+    if (env || fakeMouth || mouth > 0.02) for (const id of MOUTH_IDS) core.setParameterValueById(id, mouth);
+  }
+}
+
+// ---------- 表情 / 动作 ----------
+async function setEmotionExprs(ids) {
+  for (const a of active) if (!a.base) a.target = 0;
+  for (const id of ids || []) {
+    if (!await loadExpr(id)) continue;
+    const a = active.find(x => x.id === id && !x.base);
+    if (a) a.target = 1; else active.push({id, w: 0, target: 1, base: false});
+  }
+}
+function clearEmotion() { for (const a of active) if (!a.base) a.target = 0; }
+function playMotion(id) {
+  if (model && id && INFO.motions.some(m => m.id === id)) model.motion(id, 0, 3);
+}
+function applyEmotion(name) {
+  const emo = (CFG.emotions || []).find(e => e.name === name);
+  if (!emo) return false;
+  setEmotionExprs(emo.expressions);
+  playMotion(emo.motion);
+  return true;
+}
+
+// ---------- 气泡 ----------
+function styleBubble() {
+  bubble.style.fontSize = (CFG.bubble_font || 26) + 'px';
+  bubble.style.maxWidth = (CFG.bubble_width || 420) + 'px';
+  bubble.style.background = CFG.bubble_bg || '#fff';
+  bubble.style.color = CFG.bubble_color || '#333';
+  bubble.style.borderColor = CFG.bubble_border || '#fb7299';
+  bubble.style.setProperty('--bg', CFG.bubble_bg || '#fff');
+  bubble.style.setProperty('--bd', CFG.bubble_border || '#fb7299');
+}
+function placeBubble() {
+  if (!model) return;
+  const mw = baseW * model.scale.x, mh = baseH * model.scale.y;
+  const ax = model.x + (CFG.bubble_x ?? 0.28) * mw, ay = (model.y - mh) + (CFG.bubble_y ?? 0.12) * mh;
+  const bw = bubble.offsetWidth, bh = bubble.offsetHeight;
+  let left = ax - 38, flip = false;
+  if (left + bw > innerWidth - 8) { left = ax - bw + 38; flip = true; }
+  left = Math.max(8, Math.min(left, innerWidth - bw - 8));
+  bubble.classList.toggle('flip', flip);
+  bubble.style.left = left + 'px';
+  bubble.style.top = Math.max(8, ay - bh - 22) + 'px';
+}
+function showBubble(text, dur) {
+  if (!CFG.bubble || !CFG.enabled) return;
+  clearTimeout(bubbleTimer); clearInterval(typeTimer);
+  const chars = [...text], shown = bubble.querySelector('.shown'), hid = bubble.querySelector('.hid');
+  shown.textContent = ''; hid.textContent = text;
+  styleBubble(); placeBubble();
+  bubble.classList.add('on');
+  const total = Math.max(0.4, Math.min((dur || chars.length * 0.18) * 0.85, chars.length * 0.2));
+  const t0 = performance.now();
+  typeTimer = setInterval(() => {
+    const n = Math.min(chars.length, Math.ceil((performance.now() - t0) / 1000 / total * chars.length));
+    shown.textContent = chars.slice(0, n).join(''); hid.textContent = chars.slice(n).join('');
+    if (n >= chars.length) clearInterval(typeTimer);
+  }, 40);
+}
+function hideBubbleLater(sec) {
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => bubble.classList.remove('on'), sec * 1000);
+}
+
+// ---------- 消息 ----------
+function onSpeak(m) {
+  if (!CFG || !CFG.enabled) return;
+  speakId = m.id;
+  clearTimeout(clearTimer);
+  env = m.env && m.env.length ? m.env : null; envFps = m.fps || 30; envStart = performance.now();
+  fakeMouth = !env;
+  if (!m.emotion || !applyEmotion(m.emotion)) clearEmotion();
+  showBubble(m.text, m.dur);
+}
+function onSpeakEnd(m) {
+  if (m.id !== speakId) return;
+  env = null; fakeMouth = false;
+  clearTimeout(clearTimer);
+  clearTimer = setTimeout(clearEmotion, (CFG.expr_hold ?? 3) * 1000);
+  hideBubbleLater(CFG.bubble_hold ?? 4);
+}
+async function onTest(m) {
+  if (!CFG.enabled) return;
+  clearTimeout(clearTimer);
+  if (m.emotion) applyEmotion(m.emotion);
+  else { await setEmotionExprs(m.expressions); playMotion(m.motion); }
+  if (m.text) { showBubble(m.text, m.text.length * 0.2); hideBubbleLater(m.text.length * 0.2 + (CFG.bubble_hold ?? 4)); }
+  clearTimer = setTimeout(clearEmotion, 4000);
+}
+async function onConfig() {
+  const before = modelKey;
+  await fetchInfo();
+  modelKey = JSON.stringify([CFG.enabled, CFG.model_dir, CFG.model_file, CFG.idle_motion, CFG.blink, CFG.base_expressions]);
+  if (modelKey !== before) await loadModel(); else layout();
+  if (!CFG.enabled || !CFG.bubble) bubble.classList.remove('on');
+}
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { stopped = false; lastOk = Date.now(); };
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.kind === 'bye') { stopped = true; lastOk = 0; online(false); return; }
+    lastOk = Date.now();
+    if (m.kind === 'speak') onSpeak(m);
+    else if (m.kind === 'speak_end') onSpeakEnd(m);
+    else if (m.kind === 'l2d_config') onConfig();
+    else if (m.kind === 'l2d_test') onTest(m);
+  };
+  ws.onclose = () => setTimeout(connect, 2000);
+}
+let onlineState = true, lastOk = 0, stopped = false;
+function online(ok) {
+  if (ok === onlineState) return;
+  onlineState = ok;
+  document.documentElement.classList.toggle('off', !ok);
+  if (!ok) { env = null; fakeMouth = false; bubble.classList.remove('on'); app.ticker.stop(); }
+  else app.ticker.start();
+}
+setInterval(() => online(!stopped && Date.now() - lastOk < 5000), 1000);
+addEventListener('resize', layout);
+onConfig().then(connect);
+</script>
+</body>
+</html>

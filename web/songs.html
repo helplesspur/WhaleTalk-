@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>鲸语 · 点歌列表</title>
+<style>
+html,body{margin:0;background:transparent;font-family:"Microsoft YaHei UI","PingFang SC",sans-serif;color:#fff}
+#box{margin:10px;width:calc(100vw - 20px);max-width:520px;background:rgba(20,22,32,.72);border:2px solid #fb7299;border-radius:16px;padding:14px 16px;box-sizing:border-box;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.title{font-size:18px;font-weight:700;color:#fb7299;margin-bottom:8px;display:flex;justify-content:space-between}
+.title small{color:#ccd;font-weight:400;font-size:13px}
+.now{font-size:20px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{font-size:13px;color:#ccd;margin-top:2px}
+.bar{height:6px;background:rgba(255,255,255,.18);border-radius:3px;margin:8px 0 10px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#fb7299,#23ade5);width:0}
+ol{margin:0;padding:0;list-style:none;font-size:15px}
+li{padding:5px 0;border-top:1px dashed rgba(255,255,255,.18);display:flex;gap:8px;white-space:nowrap}
+li .n{color:#fb7299;width:22px;flex-shrink:0;font-weight:700}
+li .s{overflow:hidden;text-overflow:ellipsis;flex:1}
+li .by{color:#ccd;font-size:13px;flex-shrink:0}
+.pin{background:#fb7299;color:#fff;border-radius:4px;padding:0 5px;font-size:12px;margin-right:4px}
+.empty{color:#ccd;font-size:14px}
+html.off body{visibility:hidden}
+</style>
+</head>
+<body>
+<div id="box">
+  <div class="title">♪ 点歌列表 <small id="hint"></small></div>
+  <div id="now"></div>
+  <ol id="list"></ol>
+</div>
+<script>
+const MAX = +(new URLSearchParams(location.search).get('n') || 8);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+function render(st) {
+  const c = st.current;
+  document.getElementById('now').innerHTML = c
+    ? `<div class="now">${c.paused ? '⏸' : '▶'} ${esc(c.name)} - ${esc(c.artist)}</div><div class="sub">点歌：${esc(c.by)}　${fmt(c.pos)} / ${fmt(c.total)}</div><div class="bar"><i style="width:${c.total ? Math.min(100, c.pos / c.total * 100) : 0}%"></i></div>`
+    : '<div class="empty">现在没有在放歌，发送“点歌:歌名”来点歌吧</div><div style="height:8px"></div>';
+  document.getElementById('hint').textContent = st.queue.length ? `共 ${st.queue.length} 首待播` : '';
+  document.getElementById('list').innerHTML = st.queue.slice(0, MAX).map((s, i) =>
+    `<li><span class="n">${i + 1}</span><span class="s">${s.pinned ? '<span class="pin">插队</span>' : ''}${esc(s.name)} - ${esc(s.artist)}</span><span class="by">${esc(s.by)}</span></li>`).join('')
+    + (st.queue.length > MAX ? `<li><span class="n"></span><span class="s by">……还有 ${st.queue.length - MAX} 首</span></li>` : '');
+}
+fetch('/api/songs/state').then(r => r.json()).then(render).catch(() => {});
+let lastOk = 0, shown = true, stopped = false;
+function setOnline(ok) {
+  if (ok === shown) return;
+  shown = ok;
+  document.documentElement.classList.toggle('off', !ok);
+}
+setInterval(() => setOnline(!stopped && Date.now() - lastOk < 5000), 1000);
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { stopped = false; lastOk = Date.now(); };
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.kind === 'bye') { stopped = true; lastOk = 0; setOnline(false); return; }
+    lastOk = Date.now();
+    if (m.kind === 'songs') render(m);
+  };
+  ws.onclose = () => setTimeout(connect, 2000);
+}
+connect();
+</script>
+</body>
+</html>

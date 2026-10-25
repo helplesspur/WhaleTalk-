@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>鲸语 · 字幕</title>
+<style>
+html,body{margin:0;background:transparent;overflow:hidden;font-family:"Microsoft YaHei UI","PingFang SC",sans-serif}
+#box{position:fixed;left:50%;bottom:16px;transform:translate(-50%,20px);max-width:92vw;padding:14px 26px;border-radius:16px;
+  background:rgba(20,22,32,.78);border:2px solid #fb7299;color:#fff;font-size:34px;font-weight:700;line-height:1.35;
+  text-shadow:0 2px 4px rgba(0,0,0,.6);opacity:0;transition:opacity .3s,transform .3s}
+#box.on{opacity:1;transform:translate(-50%,0)}
+html.off body{visibility:hidden}
+</style>
+</head>
+<body>
+<div id="box"></div>
+<script>
+let keep = 8, hideTimer = null;
+fetch('/api/config').then(r => r.json()).then(c => keep = c.overlay?.seconds ?? 8).catch(() => {});
+const box = document.getElementById('box');
+let lastOk = 0, shown = true, stopped = false;
+function setOnline(ok) {
+  if (ok === shown) return;
+  shown = ok;
+  document.documentElement.classList.toggle('off', !ok);
+}
+setInterval(() => setOnline(!stopped && Date.now() - lastOk < 5000), 1000);
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { stopped = false; lastOk = Date.now(); };
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.kind === 'bye') { stopped = true; lastOk = 0; box.classList.remove('on'); setOnline(false); return; }
+    lastOk = Date.now();
+    if (m.kind === 'speak') { clearTimeout(hideTimer); box.textContent = m.text; box.classList.add('on'); }
+    if (m.kind === 'speak_end') { clearTimeout(hideTimer); hideTimer = setTimeout(() => box.classList.remove('on'), keep * 1000); }
+  };
+  ws.onclose = () => setTimeout(connect, 2000);
+}
+connect();
+</script>
+</body>
+</html>
