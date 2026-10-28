@@ -110,7 +110,32 @@ class NetEase:
         prof, acc = d.get("profile") or {}, d.get("account") or {}
         if not prof:
             return None
-        return {"nickname": prof.get("nickname", ""), "vip": int(acc.get("vipType") or prof.get("vipType") or 0)}
+        return {"nickname": prof.get("nickname", ""), "vip": int(acc.get("vipType") or prof.get("vipType") or 0),
+                "uid": prof.get("userId")}
+
+    async def my_playlists(self):
+        acc = await self.account()
+        if not acc:
+            raise RuntimeError("网易云未登录（点歌页 → 扫码登录）")
+        d = await self._get("/api/user/playlist", {"uid": acc["uid"], "limit": 100, "offset": 0})
+        out = []
+        for p in d.get("playlist") or []:
+            out.append({"id": p["id"], "name": p.get("name", ""),
+                        "count": p.get("trackCount") or 0,
+                        "mine": bool(p.get("creator") and p["creator"].get("userId") == acc["uid"])})
+        return {"account": acc, "playlists": out}
+
+    async def playlist_tracks(self, pid, limit=1000):
+        d = await self._get("/api/v6/playlist/detail", {"id": pid, "n": limit})
+        pl = d.get("playlist") or {}
+        tracks = []
+        for t in pl.get("tracks") or []:
+            if not t or not t.get("id"):
+                continue
+            tracks.append({"id": t["id"], "name": t.get("name", ""),
+                           "artist": "、".join(a.get("name", "") for a in t.get("ar") or []),
+                           "dur": round((t.get("dt") or 0) / 1000)})
+        return {"name": pl.get("name", ""), "tracks": tracks}
 
 
 def _tokens(q):

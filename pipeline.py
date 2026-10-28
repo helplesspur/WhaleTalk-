@@ -5,8 +5,11 @@ import random
 import re
 import time
 
+import numpy as np
+
 from brain import fill
-from tts import ENV_FPS, envelope
+from tts import ENV_FPS, envelope, _resample
+from tts_cache import CACHE as TTS_CACHE, segments as tts_segments
 
 log = logging.getLogger("pipe")
 
@@ -48,6 +51,7 @@ class Pipeline:
         self.merging = {}
         self.current = None
         self.tasks = []
+        self.spoken = {}
 
     @property
     def cfg(self):
@@ -71,11 +75,13 @@ class Pipeline:
         fixed = ev.get("fixed_rule") is not None
         if not ec or not (ec.get("enabled") or fixed):
             return "该类型未启用"
+        if t == "danmaku" and not fixed and self.app.games.mute_chat():
+            return "游戏进行中"
         f = self.cfg["filter"]
         ignore = _split(f.get("ignore_users"))
         if ev.get("raw_name") in ignore or str(ev.get("uid")) in ignore:
             return "忽略名单"
-        if f.get("ignore_owner") and ev.get("uid") and ev.get("uid") == self.app.bili.owner_uid and not ev.get("test"):
+        if f.get("ignore_owner") and ev.get("uid") and ev.get("uid") == self.app.owner_uid and not ev.get("test"):
             return "主播本人"
         text = ev.get("text", "")
         if any(w in text or w in ev.get("raw_name", "") for w in _split(f.get("blocklist"))):
@@ -139,12 +145,19 @@ class Pipeline:
             self.app.push("event", {"type": "danmaku", "tname": "点歌", "desc": describe(ev), "skip": None,
                                     "test": bool(ev.get("test"))})
             return
+        if ev["type"] == "danmaku" and self.app.games.on_danmaku(ev):
+            self.app.push("event", {"type": "danmaku", "tname": "游戏", "desc": describe(ev), "skip": None,
+                                    "test": bool(ev.get("test"))})
+            return
         if ev["type"] == "danmaku":
             rule = self.match_fixed(ev.get("text"))
             if rule:
                 ev["fixed_rule"] = dict(rule)
         reason = "已暂停" if self.paused else self._reject(ev)
-        self.app.push("event", {"type": ev["type"], "tname": TYPE_NAMES.get(ev["type"], ev["type"]),
+        tname = TYPE_NAMES.get(ev["type"], ev["type"])
+        if ev["type"] == "guard" and ev.get("platform") == "douyin":
+            tname = "粉丝团"
+        self.app.push("event", {"type": ev["type"], "tname": tname,
                                 "desc": describe(ev) + ("（命中固定回复）" if ev.get("fixed_rule") else ""),
                                 "skip": reason, "test": bool(ev.get("test"))})
         if reason:
@@ -206,14 +219,40 @@ class Pipeline:
         while len(self.jobs) > limit:
             victim = max(self.jobs, key=lambda j: (j["prio"], -j["ts"]))
             self.jobs.remove(victim)
+            fut = self.spoken.pop(victim["id"], None)
+            if fut and not fut.done():
+                fut.set_result(None)
             self.app.push("log", {"level": "warn", "msg": f"队列已满，丢弃：{describe(victim['ev'])}"})
         self.has_job.set()
         self._push_queue()
+        return job
 
     def say(self, text, emotion=""):
-        self._enqueue({"type": "manual", "name": "", "text": text, "emotion": emotion}, text=text)
+        job = self._enqueue({"type": "manual", "name": "", "text": text, "emotion": emotion}, text=text)
+        try:
+            self.spoken[job["id"]] = asyncio.get_running_loop().create_future()
+        except RuntimeError:
+            pass
+        return job["id"]
+
+    async def wait_spoken(self, jid, timeout=30.0):
+        """等这一条真的播完（被队列丢弃也会立即放行）。"""
+        fut = self.spoken.get(jid)
+        if fut is None:
+            return
+        try:
+            await asyncio.wait_for(asyncio.shield(fut), timeout)
+        except asyncio.TimeoutError:
+            if not fut.done():
+                fut.cancel()
+        finally:
+            self.spoken.pop(jid, None)
 
     def clear(self):
+        for job in self.jobs:
+            fut = self.spoken.pop(job["id"], None)
+            if fut and not fut.done():
+                fut.set_result(None)
         self.jobs.clear()
         self.merging.clear()
         self._push_queue()
@@ -239,6 +278,9 @@ class Pipeline:
                 max_wait *= 3
             if time.time() - job["ts"] > max_wait:
                 self.app.push("log", {"level": "warn", "msg": f"等待超过 {int(max_wait)} 秒，放弃：{describe(job['ev'])}"})
+                fut = self.spoken.pop(job["id"], None)
+                if fut and not fut.done():
+                    fut.set_result(None)
                 continue
             try:
                 emotion = ""
@@ -264,18 +306,66 @@ class Pipeline:
             self.app.push("reply", item)
             await self.synth_q.put(item)
 
+    async def _synth_segments(self, tts, chunks):
+        """按拆段结果拼 PCM：固定片段读缓存，变量现场合成。"""
+        parts, sr0 = [], None
+        for kind, text in chunks:
+            if kind == "cache":
+                hit = TTS_CACHE.get(text, tts)
+                if not hit:
+                    return None
+                pcm, sr = hit
+            else:
+                pcm, sr = await self.app.engine.synth(tts, text)
+            if pcm is None or len(pcm) == 0:
+                continue
+            if sr0 is None:
+                sr0 = sr
+            elif sr != sr0:
+                pcm = _resample(pcm, sr, sr0)
+            parts.append(pcm)
+        if not parts:
+            return None
+        if len(parts) == 1:
+            return parts[0], sr0
+        gap = np.zeros((int(sr0 * 0.025), parts[0].shape[1]), dtype=np.int16)
+        out = [parts[0]]
+        for p in parts[1:]:
+            out += [gap, p]
+        return np.concatenate(out, axis=0), sr0
+
     async def _synth_worker(self):
         while True:
             item = await self.synth_q.get()
             tts = self.cfg["tts"]
             if tts.get("enabled", True):
-                try:
-                    t0 = time.time()
-                    item["pcm"], item["sr"] = await self.app.engine.synth(tts, item["text"])
-                    item["synth_s"] = round(time.time() - t0, 1)
-                except Exception as e:
-                    self.app.push("log", {"level": "error", "msg": f"语音合成失败：{e}"})
-                    item["pcm"] = None
+                hit = TTS_CACHE.get(item["text"], tts)
+                if hit:
+                    item["pcm"], item["sr"] = hit
+                    item["synth_s"] = 0.0
+                    item["cached"] = True
+                else:
+                    chunks = tts_segments(item["text"], self.cfg)
+                    got = None
+                    if chunks:
+                        t0 = time.time()
+                        try:
+                            got = await self._synth_segments(tts, chunks)
+                        except Exception as e:
+                            self.app.push("log", {"level": "warn", "msg": f"分段合成失败，改用整句：{e}"})
+                            got = None
+                        if got:
+                            item["pcm"], item["sr"] = got
+                            item["synth_s"] = round(time.time() - t0, 1)
+                            item["segmented"] = True
+                    if got is None:
+                        try:
+                            t0 = time.time()
+                            item["pcm"], item["sr"] = await self.app.engine.synth(tts, item["text"])
+                            item["synth_s"] = round(time.time() - t0, 1)
+                        except Exception as e:
+                            self.app.push("log", {"level": "error", "msg": f"语音合成失败：{e}"})
+                            item["pcm"] = None
             await self.play_q.put(item)
 
     async def _play_worker(self):
@@ -286,6 +376,7 @@ class Pipeline:
             pcm = item.get("pcm")
             self.app.push("speak", {"text": item["text"], "id": item["id"], "synth_s": item.get("synth_s"),
                                     "emotion": item.get("emotion", ""), "fps": ENV_FPS,
+                                    "cached": bool(item.get("cached")), "segmented": bool(item.get("segmented")),
                                     "env": envelope(pcm, item["sr"]) if pcm is not None else None,
                                     "dur": round(len(pcm) / item["sr"], 2) if pcm is not None else None})
             try:
@@ -300,3 +391,6 @@ class Pipeline:
             finally:
                 self.current = None
                 self.app.push("speak_end", {"id": item["id"]})
+                fut = self.spoken.pop(item["id"], None)
+                if fut and not fut.done():
+                    fut.set_result(None)

@@ -6,14 +6,25 @@ __pycache__/
 # Build output
 build/
 dist/
-*.spec
-release/
+
+# Release package: 只放编译产物和教程，配置/日志/工作目录一律不进仓库
+release/*
+!release/鲸语 WhaleTalk/
+release/鲸语 WhaleTalk/*
+!release/鲸语 WhaleTalk/WhaleTalk.exe
+!release/鲸语 WhaleTalk/qoder_login.bat
+!release/鲸语 WhaleTalk/鲸语 WhaleTalk 使用教程.txt
 
 # Local settings & runtime data (contain login cookies!)
 config.json
 config.json.bak
 logs/
 qoder_workdir/
+cli_workdir/
+douyin_profile/
+tts_cache/
+ui_profile/
+zcode_identity.json
 
 # Media / model weights / datasets (never commit)
 *.wav
@@ -28,6 +39,10 @@ qoder_workdir/
 *.moc3
 *.model3.json
 *.physics3.json
+
+# 宣传素材：含角色皮套与表情包，版权归作者，默认不进公开仓库（说明文件除外）
+docs/promo/refs/*
+!docs/promo/refs/README.md
 
 # Editors / OS
 .idea/

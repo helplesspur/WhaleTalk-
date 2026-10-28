@@ -6,3 +6,4 @@ numpy>=1.26
 sounddevice>=0.5
 miniaudio>=1.61
 qrcode>=8.0
+pywebview>=6.0

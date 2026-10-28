@@ -16,13 +16,27 @@ LOG_DIR = os.path.join(BASE_DIR, "logs")
 WEB_DIR = os.path.join(RES_DIR, "web")
 
 DEFAULT_PERSONA = (
-    "你是一位活泼可爱、说话自然的B站虚拟主播，正在直播。"
-    "观众的进房、弹幕、礼物、上舰等消息会发给你，你要像真人主播一样用口语回应。"
+    "你是一位活泼可爱、说话自然的虚拟主播，正在直播。"
+    "观众的进场、弹幕、礼物、粉丝团等消息会发给你，你要像真人主播一样用口语回应。"
 )
 
 DEFAULTS = {
+    "platform": "bilibili",
+    "ui": {"native": True, "width": 1400, "height": 940},
+    "session": {"auto_start": False},
     "room_id": 0,
     "bili_cookie": "",
+    "douyin": {
+        "mode": "browser",
+        "web_rid": "",
+        "room_url": "",
+        "browser_exe": "",
+        "debug_port": 9333,
+        "profile_dir": "",
+        "keep_browser": True,
+        "headless": False,
+        "gift_prices": "小心心=1\n玫瑰=1\n大啤酒=2\n加油鸭=5\n抖音1号=10001",
+    },
     "auto_connect": False,
     "web_port": 8787,
     "open_ui": True,
@@ -83,7 +97,25 @@ DEFAULTS = {
         "openai_base": "https://api.deepseek.com/v1",
         "openai_key": "",
         "openai_model": "deepseek-chat",
+        "openai_mode": "responses",
+        "thinking": "default",
         "timeout": 30,
+    },
+    "cli": {
+        "preset": "",
+        "exe": "",
+        "args": [],
+        "env": "",
+        "cwd": "",
+        "json_field": "",
+        "timeout": 90,
+    },
+    "zcode": {
+        "proxy_url": "http://127.0.0.1:17899",
+        "plugin_dir": r"D:\tools\bonus-plan",
+        "node_exe": r"D:\tools\node\node.exe",
+        "autostart": True,
+        "model": "GLM-5.3-Flash",
     },
     "tts": {
         "enabled": True,
@@ -102,9 +134,22 @@ DEFAULTS = {
         "top_k": 15,
         "top_p": 1.0,
         "sample_steps": 32,
+        "bake_extra": "",
+        "segment_bake": True,
     },
     "audio": {"device": "", "volume": 80},
     "overlay": {"seconds": 8},
+    "stats": {
+        "token_label": "本场已用 Token",
+        "title": "",
+        "show_tokens": True,
+        "show_duration": True,
+        "show_gifts": True,
+        "gift_list": True,
+        "gift_rows": 4,
+        "font_size": 24,
+        "position": "top-left",
+    },
     "songs": {
         "enabled": True,
         "require_gift": True,
@@ -118,6 +163,8 @@ DEFAULTS = {
         "volume": 45,
         "duck": 30,
         "netease_cookie": "",
+        "autoplay": {"enabled": False, "playlist_id": "", "playlist_name": "", "mode": "shuffle",
+                     "interrupt": True, "max_fail": 3},
         "announce_add": True,
         "announce_similar": True,
         "announce_pin": True,
@@ -132,6 +179,34 @@ DEFAULTS = {
         "tpl_fail": "抱歉{name}，没找到能播放的《{query}》。",
         "tpl_need": "{name}，送{num}个{gift}就可以点歌哦！",
         "tpl_full": "{name}，歌单排满啦，等前面的播完再点吧！",
+    },
+    "games": {
+        "enabled": True,
+        "auto": False,
+        "interval": 180,
+        "guess_max": 8,
+        "snake_speed_ms": 350,
+        "mines": 10,
+        "arcade_delay": 2.5,
+        "lottery_winners": 1,
+        "lottery_seconds": 45,
+        "choices": {
+            "guess_number": True,
+            "number_bomb": True,
+            "quiz": True,
+            "word_chain": True,
+            "poll": True,
+            "snake": True,
+            "minesweeper": True,
+            "game2048": True,
+            "rps": True,
+            "lottery": True,
+            "feihualing": True,
+            "fact": True,
+            "story": True,
+            "riddle": True,
+            "joke": True,
+        },
     },
     "fixed_replies": [
         {"enabled": True, "keywords": "晚安", "match": "contains", "reply": "{name}晚安，做个好梦！", "emotion": "开心"},

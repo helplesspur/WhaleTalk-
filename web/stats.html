@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>鲸语 · 本场数据</title>
+<style>
+html,body{margin:0;background:transparent;overflow:hidden;font-family:"Microsoft YaHei UI","PingFang SC",system-ui,sans-serif}
+html.off body{visibility:hidden}
+#wrap{position:fixed;display:flex;flex-direction:column;gap:.35em;max-width:94vw;font-size:24px}
+.it{display:flex;align-items:baseline;gap:.5em;padding:.22em .7em;border-radius:.55em;
+  background:rgba(18,20,30,.72);border-left:.22em solid #fb7299;color:#fff;
+  text-shadow:0 .06em .16em rgba(0,0,0,.65);box-shadow:0 .18em .6em rgba(0,0,0,.22);white-space:nowrap}
+.it .k{color:#cbd0e0;font-weight:600;font-size:.72em}
+.it .v{font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+#title{display:none;padding:.18em .7em;border-radius:.55em;background:rgba(18,20,30,.8);
+  color:#ffd479;font-weight:800;letter-spacing:.06em;box-shadow:0 .18em .6em rgba(0,0,0,.22)}
+#gifts{display:none;flex-direction:column;gap:.16em;padding:.4em .8em;border-radius:.55em;
+  background:rgba(18,20,30,.62);color:#e9ecf5;box-shadow:0 .18em .6em rgba(0,0,0,.22)}
+#gifts .gr{display:flex;justify-content:space-between;gap:1em;font-size:.66em;line-height:1.5}
+#gifts .gr .l{color:#cfd4e2;overflow:hidden;text-overflow:ellipsis}
+#gifts .gr b{color:#ffd479;font-weight:700}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="title"></div>
+  <div class="it" id="tok"><span class="k"></span><span class="v">0</span></div>
+  <div class="it" id="dur"><span class="k">本场已播</span><span class="v">00:00:00</span></div>
+  <div class="it" id="gif"><span class="k">本场礼物</span><span class="v">0 件 · ¥0.00</span></div>
+  <div id="gifts"></div>
+</div>
+<script>
+const q = new URLSearchParams(location.search);
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const num = n => Number(n || 0).toLocaleString();
+const money = n => '¥' + Number(n || 0).toFixed(2);
+function fmtDur(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = sec % 60;
+  return [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
+}
+
+let cfg = {show_tokens: true, show_duration: true, show_gifts: true, gift_list: true, gift_rows: 4,
+           font_size: 24, position: 'top-left', token_label: '本场已用 Token', title: ''};
+let stats = null, durBase = 0, durAt = 0, live = false;
+let lastOk = 0, stopped = false, shown = true;
+
+const wrap = $('#wrap');
+
+function applyCfg(next) {
+  if (next && next.stats) cfg = Object.assign(cfg, next.stats);
+  const fs = Number(q.get('fs') || cfg.font_size || 24);
+  wrap.style.fontSize = Math.min(120, Math.max(10, fs)) + 'px';
+  const pos = q.get('pos') || cfg.position || 'top-left';
+  wrap.style.left = pos.includes('left') ? '24px' : 'auto';
+  wrap.style.right = pos.includes('right') ? '24px' : 'auto';
+  wrap.style.top = pos.includes('top') ? '24px' : 'auto';
+  wrap.style.bottom = pos.includes('bottom') ? '24px' : 'auto';
+  const title = (q.get('title') ?? cfg.title ?? '').trim();
+  $('#title').textContent = title;
+  render();
+}
+
+function render() {
+  if (!stats) return;
+  const t = stats.tokens || {}, est = (t.est_calls || 0) > 0;
+  const g = stats.gifts || {}, recent = g.recent || [];
+  const rows = Number(q.get('rows') || cfg.gift_rows || 0);
+
+  const tok = $('#tok');
+  tok.style.display = cfg.show_tokens ? '' : 'none';
+  tok.querySelector('.k').textContent = stats.token_label || cfg.token_label || '本场已用 Token';
+  tok.querySelector('.v').textContent = (est ? '≈ ' : '') + num(t.total);
+
+  $('#dur').style.display = cfg.show_duration ? '' : 'none';
+  $('#dur .v').textContent = fmtDur(durBase + (live ? (Date.now() - durAt) / 1000 : 0));
+
+  $('#gif').style.display = cfg.show_gifts ? '' : 'none';
+  $('#gif .v').textContent = `${num(g.count)} 件 · ${money(g.value)}`;
+
+  const box = $('#gifts');
+  const showList = cfg.gift_list && rows > 0 && recent.length > 0;
+  box.style.display = showList ? 'flex' : 'none';
+  if (showList) {
+    box.innerHTML = recent.slice(0, rows).map(r =>
+      `<div class="gr"><span class="l">${esc(r.t)} ${esc(r.name)} ${esc(r.gift)} ×${r.num}</span>` +
+      `<b>${r.value ? money(r.value) : '免费'}</b></div>`).join('');
+  }
+  const any = cfg.show_tokens || cfg.show_duration || cfg.show_gifts;
+  $('#title').style.display = (($('#title').textContent || '').trim() && any) ? 'block' : 'none';
+  wrap.style.display = any ? 'flex' : 'none';
+}
+
+function onStats(st) {
+  if (!st) return;
+  stats = st;
+  durBase = st.duration || 0;
+  durAt = Date.now();
+  live = !!st.live;
+  render();
+}
+
+setInterval(() => { if (live && stats) $('#dur .v').textContent = fmtDur(durBase + (Date.now() - durAt) / 1000); }, 1000);
+
+function setOnline(ok) {
+  if (ok === shown) return;
+  shown = ok;
+  document.documentElement.classList.toggle('off', !ok);
+}
+setInterval(() => setOnline(!stopped && Date.now() - lastOk < 6000), 1000);
+
+async function loadCfg() {
+  try { applyCfg(await (await fetch('/api/config')).json()); } catch (e) { /* 程序没起来就先不处理 */ }
+}
+loadCfg();
+setInterval(loadCfg, 5000);
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { stopped = false; lastOk = Date.now(); };
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.kind === 'bye') { stopped = true; lastOk = 0; setOnline(false); return; }
+    lastOk = Date.now();
+    if (m.kind === 'hello' && m.status) onStats(m.status.stats);
+    if (m.kind === 'status') onStats(m.status.stats);
+  };
+  ws.onclose = () => setTimeout(connect, 2000);
+}
+connect();
+</script>
+</body>
+</html>

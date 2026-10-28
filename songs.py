@@ -29,6 +29,11 @@ class SongManager:
         self.end = asyncio.Event()
         self.last_hint = {}
         self.account = None
+        self._auto_tracks = []
+        self._auto_bag = []
+        self._auto_pid = None
+        self._auto_fail = 0
+        self._auto_backoff = 0
 
     @property
     def cfg(self):
@@ -41,7 +46,11 @@ class SongManager:
                    paused=self.paused) if self.current else None
         return {"current": cur, "queue": self.queue,
                 "credits": [dict(v, key=k) for k, v in self.credits.items() if v["song"] or v["pin"] or v["song_prog"] or v["pin_prog"]],
-                "account": self.account}
+                "account": self.account,
+                "autoplay": {"enabled": bool(self.cfg.get("autoplay", {}).get("enabled")),
+                             "playlist_name": self.cfg.get("autoplay", {}).get("playlist_name", ""),
+                             "tracks": len(self._auto_tracks),
+                             "left": len(self._auto_bag)}}
 
     def push(self):
         self.app.push("songs", self.state())
@@ -163,6 +172,42 @@ class SongManager:
                                                       + ("（相似）" if s["similar"] else "")})
         self.wake.set()
         self.push()
+        ap = self.cfg.get("autoplay", {})
+        if ap.get("interrupt", True) and self.current and self.current.get("auto"):
+            self.app.player.stop_music()
+            self.end.set()
+
+    # ---------- 无人点歌时自动播放歌单 ----------
+    async def _next_auto(self):
+        ap = self.cfg.get("autoplay", {})
+        if not ap.get("enabled") or not ap.get("playlist_id"):
+            return None
+        if time.time() < self._auto_backoff:
+            return None
+        if self._auto_pid != ap["playlist_id"] or not self._auto_tracks:
+            try:
+                info = await self.ne.playlist_tracks(ap["playlist_id"])
+                self._auto_tracks = info["tracks"]
+                self._auto_pid = ap["playlist_id"]
+                self._auto_bag = []
+                if info["name"] and info["name"] != ap.get("playlist_name"):
+                    ap["playlist_name"] = info["name"]
+                self.app.push("log", {"level": "info", "msg": f"自动歌单《{info['name']}》已加载，共 {len(self._auto_tracks)} 首"})
+            except Exception as e:
+                self.app.push("log", {"level": "error", "msg": f"读取歌单失败：{e}"})
+                self._auto_backoff = time.time() + 300
+                return None
+        if not self._auto_tracks:
+            return None
+        if not self._auto_bag:
+            self._auto_bag = list(self._auto_tracks)
+            if ap.get("mode", "shuffle") == "shuffle":
+                import random as _r
+                _r.shuffle(self._auto_bag)
+        t = self._auto_bag.pop(0)
+        return {"qid": next(_qid), "id": t["id"], "name": t["name"], "artist": t["artist"],
+                "dur": t.get("dur", 0), "by": ap.get("playlist_name") or "歌单", "key": "__auto__",
+                "query": "", "pinned": False, "similar": False, "auto": True}
 
     # ---------- 播放 ----------
     async def run(self):
@@ -170,11 +215,20 @@ class SongManager:
         asyncio.create_task(self._ticker())
         asyncio.create_task(self.refresh_account())
         while True:
-            if not self.queue or not self.cfg.get("enabled") or self.paused:
+            if not self.cfg.get("enabled") or self.paused:
                 self.wake.clear()
                 await self.wake.wait()
                 continue
-            s = self.queue.pop(0)
+            if self.queue:
+                s = self.queue.pop(0)
+            elif getattr(self.app, "session_active", False):
+                s = await self._next_auto()  # 只有点了「开始」才自动放歌单
+            else:
+                s = None
+            if not s:
+                self.wake.clear()
+                await self.wake.wait()
+                continue
             self.current = s
             self.push()
             dev = self.app.cfg["audio"].get("device", "")
@@ -187,10 +241,18 @@ class SongManager:
             except Exception as e:
                 self.app.push("log", {"level": "error", "msg": f"播放《{s['name']}》失败：{e}"})
                 self.current = None
+                if s.get("auto"):
+                    self._auto_fail += 1
+                    if self._auto_fail >= int(self.cfg.get("autoplay", {}).get("max_fail", 3)):
+                        self._auto_backoff = time.time() + 600
+                        self._auto_fail = 0
+                        self.app.push("log", {"level": "warn", "msg": "自动歌单连续播放失败，10 分钟后再试"})
                 continue
+            self._auto_fail = 0
             self._apply_volume()
             self.end.clear()
-            self.say("play", name=s["by"], song=s["name"], artist=s["artist"])
+            if not s.get("auto"):
+                self.say("play", name=s["by"], song=s["name"], artist=s["artist"])
             self.app.player.play_music(pcm, sr, dev, lambda: loop.call_soon_threadsafe(self.end.set))
             self.push()
             await self.end.wait()

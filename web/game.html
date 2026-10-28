@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>鲸语 · 游戏面板</title>
+<style>
+  html,body{margin:0;background:transparent;overflow:hidden;
+    font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif}
+  #wrap{display:none;width:100vw;box-sizing:border-box;padding:14px}
+  .card{background:linear-gradient(145deg,rgba(18,20,28,.9),rgba(28,30,42,.82));
+    border:1px solid rgba(251,114,153,.55);border-radius:18px;padding:16px 20px 14px;color:#fff;
+    box-shadow:0 10px 36px rgba(0,0,0,.4);backdrop-filter:blur(8px);animation:in .28s ease-out}
+  @keyframes in{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+  .top{display:flex;align-items:center;gap:10px}
+  .name{font-weight:700;font-size:23px;color:#fb7299;letter-spacing:.5px}
+  .tag{font-size:12px;padding:2px 9px;border-radius:20px;background:rgba(35,173,229,.18);color:#7fd4ff;border:1px solid rgba(35,173,229,.35)}
+  .tag.solo{background:rgba(255,209,102,.14);color:#ffd166;border-color:rgba(255,209,102,.35)}
+  .tag.end{background:rgba(255,255,255,.1);color:#cfd6e2;border-color:rgba(255,255,255,.2)}
+  .time{margin-left:auto;font-size:19px;font-weight:600;color:#ffd166;font-variant-numeric:tabular-nums}
+  .q{font-size:27px;line-height:1.45;margin:10px 0 6px;word-break:break-word;text-shadow:0 2px 10px rgba(0,0,0,.35)}
+  .hint{font-size:17px;color:#b9c2d0;line-height:1.5}
+  .bar{height:9px;border-radius:6px;background:rgba(255,255,255,.12);margin-top:7px;overflow:hidden}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#fb7299,#23ade5);transition:width .35s}
+  .opts{display:flex;gap:12px;margin-top:10px}
+  .opt{flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 12px}
+  .opt .line{display:flex;justify-content:space-between;font-size:17px}
+  .opt b{color:#ffd166}
+  .chain{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+  .chain span{background:rgba(251,114,153,.16);border:1px solid rgba(251,114,153,.38);border-radius:8px;padding:3px 10px;font-size:16px}
+  .guesses{display:flex;gap:10px;flex-wrap:wrap;margin-top:9px;font-size:15px;color:#cfd6e2}
+  .guesses b{color:#fff}
+  .scores{display:flex;gap:16px;flex-wrap:wrap;margin-top:11px;padding-top:9px;border-top:1px dashed rgba(255,255,255,.14);font-size:15px;color:#cfd6e2}
+  .scores b{color:#ffd166}
+  #gBoard{display:none;margin-top:8px}
+  #gBoard .boardFoot{text-align:center;font-size:12px;color:rgba(255,255,255,.5);margin-top:6px}
+  .snakeCanvas{display:block;width:min(420px,100%);height:auto;margin:0 auto;border-radius:12px;background:#0b0d12}
+  .mines{display:grid;gap:4px;width:min(400px,100%);margin:0 auto}
+  .mc{aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:#3a3f4b;
+    border-radius:4px;font-weight:700;font-size:17px;color:#fff;border:1px solid rgba(255,255,255,.06)}
+  .mc.hidden{background:linear-gradient(145deg,#3b414f,#2a2f3a)}
+  .mc.open{background:#d9dee7;color:#333;border-color:#c3c9d4}
+  .mc.mine{background:#8c2f39;color:#ffd166;font-size:13px}
+  .mc.boom{background:#e0484f;color:#fff;font-size:13px}
+  .mc.last{outline:2px solid #fb7299;outline-offset:-2px}
+  .mc[data-v="1"]{color:#1976d2}.mc[data-v="2"]{color:#2e7d32}.mc[data-v="3"]{color:#c62828}
+  .mc[data-v="4"]{color:#283593}.mc[data-v="5"]{color:#6d4c41}.mc[data-v="6"]{color:#00838f}
+  .mc[data-v="7"]{color:#212121}.mc[data-v="8"]{color:#616161}
+  .g2048{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:min(340px,100%);margin:0 auto}
+  .t2048{aspect-ratio:1;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:clamp(18px,5vw,30px);background:rgba(255,255,255,.08);color:#fff}
+  .t2{background:#eee4da;color:#5c5347}.t4{background:#ede0c8;color:#5c5347}
+  .t8{background:#f2b179}.t16{background:#f59563}.t32{background:#f67c5f}.t64{background:#f65e3b}
+  .t128{background:#edcf72;color:#5c5347}.t256{background:#edcc61;color:#5c5347}
+  .t512{background:#edc850;color:#5c5347}.t1024{background:#edc53f;color:#5c5347}
+  .t2048{background:#edc22e;color:#5c5347}.t4096{background:#fb7299}
+  .foot{margin-top:8px;font-size:12px;color:rgba(255,255,255,.45);letter-spacing:.5px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="card">
+    <div class="top">
+      <span class="name" id="gName"></span>
+      <span class="tag" id="gTag"></span>
+      <span class="time" id="gTime"></span>
+    </div>
+    <div class="q" id="gQ"></div>
+    <div class="hint" id="gHint"></div>
+    <div id="gBoard"></div>
+    <div id="gExtra"></div>
+    <div class="scores" id="gScores"></div>
+    <div class="foot">鲸语 WhaleTalk · 发弹幕参与游戏</div>
+  </div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+let lastMsg = 0;
+const wrap = $('#wrap');
+
+function scoresHtml(list) {
+  return (list || []).slice(0, 4).map((s, i) =>
+    `<span>${i === 0 ? '第1名' : (i + 1) + '.'} <b>${esc(s.name)}</b> ${s.pts} 分</span>`).join('');
+}
+function optionsHtml(opts) {
+  const total = Math.max(1, opts.reduce((a, o) => a + (o.votes || 0), 0));
+  return `<div class="opts">${opts.map(o => `
+    <div class="opt"><div class="line"><span>${esc(o.label)}</span><b>${o.votes} 票</b></div>
+    <div class="bar"><i style="width:${Math.round((o.votes || 0) / total * 100)}%"></i></div></div>`).join('')}</div>`;
+}
+function extraHtml(s) {
+  let html = '';
+  if (s.options && s.options.length) html += optionsHtml(s.options);
+  if (s.chain && s.chain.length) html += `<div class="chain">${s.chain.map(c =>
+    `<span>${esc(c.word)} <small style="opacity:.6">${esc(c.name)}</small></span>`).join('')}</div>`;
+  if (s.guesses && s.guesses.length) html += `<div class="guesses">${s.guesses.map(g =>
+    `<span><b>${esc(g.name)}</b> 猜 ${g.n}</span>`).join('')}</div>`;
+  if (s.plays && s.plays.length) html += `<div class="guesses">${s.plays.slice(-4).map(p =>
+    `<span><b>${esc(p.name)}</b> ${esc(p.text)}</span>`).join('')}</div>`;
+  return html;
+}
+
+let snakeCanvas = null;
+function renderBoard(s) {
+  const box = $('#gBoard');
+  const b = s && s.board;
+  if (!b) { box.style.display = 'none'; box.innerHTML = ''; snakeCanvas = null; return; }
+  box.style.display = 'block';
+  if (b.type === 'snake') drawSnake(b);
+  else if (b.type === 'minesweeper') { snakeCanvas = null; box.innerHTML = minesHTML(b); }
+  else if (b.type === '2048') { snakeCanvas = null; box.innerHTML = tile2048HTML(b); }
+  else { box.style.display = 'none'; box.innerHTML = ''; snakeCanvas = null; }
+}
+function drawSnake(b) {
+  const box = $('#gBoard');
+  if (!snakeCanvas || !box.contains(snakeCanvas)) {
+    box.innerHTML = '';
+    snakeCanvas = document.createElement('canvas');
+    snakeCanvas.width = 420; snakeCanvas.height = 420;
+    snakeCanvas.className = 'snakeCanvas';
+    box.appendChild(snakeCanvas);
+  }
+  const ctx = snakeCanvas.getContext('2d');
+  const W = 420, cs = W / b.w;
+  ctx.clearRect(0, 0, W, W);
+  ctx.fillStyle = '#0b0d12'; ctx.fillRect(0, 0, W, W);
+  ctx.strokeStyle = 'rgba(255,255,255,.045)'; ctx.lineWidth = 1;
+  for (let i = 1; i < b.w; i++) {
+    ctx.beginPath(); ctx.moveTo(i * cs, 0); ctx.lineTo(i * cs, W); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * cs); ctx.lineTo(W, i * cs); ctx.stroke();
+  }
+  if (b.food) {
+    const [fx, fy] = b.food;
+    ctx.fillStyle = '#ffd166';
+    ctx.beginPath();
+    ctx.arc(fx * cs + cs / 2, fy * cs + cs / 2, cs * 0.33, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (let i = b.snake.length - 1; i >= 0; i--) {
+    const [x, y] = b.snake[i];
+    const pad = 1.6, head = i === 0;
+    ctx.fillStyle = head ? '#fb7299' : 'rgba(35,173,229,.88)';
+    const rx = x * cs + pad, ry = y * cs + pad, rw = cs - pad * 2, rh = cs - pad * 2, rr = cs * 0.28;
+    ctx.beginPath();
+    ctx.moveTo(rx + rr, ry);
+    ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, rr);
+    ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, rr);
+    ctx.arcTo(rx, ry + rh, rx, ry, rr);
+    ctx.arcTo(rx, ry, rx + rw, ry, rr);
+    ctx.closePath(); ctx.fill();
+  }
+}
+function minesHTML(b) {
+  const cells = b.cells.map((row, r) => row.map((v, c) => {
+    let cls = 'mc', txt = '';
+    if (v === null) cls += ' hidden';
+    else if (v === 'mine' || v === 'boom') { cls += v === 'boom' ? ' boom' : ' mine'; txt = v === 'boom' ? '炸' : '雷'; }
+    else { cls += ' open'; txt = v === 0 ? '' : v; }
+    if (b.last && b.last[0] === r && b.last[1] === c) cls += ' last';
+    return `<div class="${cls}" data-v="${v === null ? '' : v}">${txt}</div>`;
+  }).join('')).join('');
+  const state = b.won ? '排雷成功' : b.dead ? '踩到雷了' : 'AI 推理中';
+  return `<div class="mines" style="grid-template-columns:repeat(${b.size},1fr)">${cells}</div>
+          <div class="boardFoot">剩余 ${b.left} 格 · ${state}</div>`;
+}
+function tile2048HTML(b) {
+  const tiles = b.grid.flat().map(v => `<div class="t2048 t${v || 0}">${v || ''}</div>`).join('');
+  return `<div class="g2048">${tiles}</div>
+          <div class="boardFoot">得分 ${b.score} · 最高 ${b.highest}</div>`;
+}
+function render(st) {
+  if (!st) return;
+  const a = st.active, r = st.result;
+  if (!a && !r) { wrap.style.display = 'none'; renderBoard(null); return; }
+  const s = a || r;
+  lastMsg = Date.now();
+  wrap.style.display = 'block';
+  const cat = s.cat === 'solo' ? '<span class="tag solo">单人节目</span>'
+                               : '<span class="tag">观众互动</span>';
+  $('#gName').textContent = s.name || '';
+  $('#gTag').innerHTML = cat + (a ? '' : '<span class="tag end">本局结束</span>');
+  $('#gTime').textContent = a ? (s.left != null ? s.left + ' 秒' : '') : '结算';
+  $('#gQ').textContent = (a ? s.question : s.text) || '';
+  $('#gHint').textContent = a ? (s.hint || '') : '';
+  renderBoard(s);
+  $('#gExtra').innerHTML = extraHtml(s);
+  $('#gScores').innerHTML = scoresHtml((s.scores && s.scores.length) ? s.scores : st.board);
+}
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = e => {
+    let m;
+    try { m = JSON.parse(e.data); } catch (_) { return; }
+    if (m.kind === 'bye') { wrap.style.display = 'none'; ws.close(); return; }
+    if (m.kind === 'game') render(m);
+    else if (m.kind === 'hello') render(m.game);
+  };
+  ws.onclose = () => setTimeout(connect, 3000);
+}
+connect();
+setInterval(() => {
+  if (wrap.style.display === 'block' && Date.now() - lastMsg > 6000) wrap.style.display = 'none';
+}, 2000);
+</script>
+</body>
+</html>
