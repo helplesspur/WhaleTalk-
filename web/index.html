@@ -527,10 +527,12 @@ pre.log{background:rgba(7,9,14,.78);border:1px solid var(--line);border-radius:1
     <h3>音色</h3>
     <div class="row">
       <label class="f">GPT 模型 (.ckpt)<select data-k="tts.gpt_weights" id="gptSel"></select></label>
+      <span class="btn sm" id="gptPick" style="margin-top:18px">浏览…</span>
       <label class="f">SoVITS 模型 (.pth)<select data-k="tts.sovits_weights" id="sovitsSel"></select></label>
+      <span class="btn sm" id="sovitsPick" style="margin-top:18px">浏览…</span>
       <span class="btn sm" id="wRefresh" style="margin-top:18px">刷新列表</span>
     </div>
-    <p class="hint">没有自己训练的模型时用默认的 v2Pro 预训练模型即可（零样本克隆参考音频的声音）。自己训练的模型放在 GPT_weights* / SoVITS_weights* 目录里会自动列出。</p>
+    <p class="hint">训练好的模型可以直接点「浏览…」从任意位置选，选完自动应用并记进历史列表，不用手动往 GPT_weights* / SoVITS_weights* 里放。没有自己训的模型就用默认的 v2Pro 预训练模型（零样本克隆参考音频的声音）。</p>
     <div class="row">
       <label class="f">参考音频（3~10 秒干净人声）<input data-k="tts.ref_audio"></label>
       <span class="btn" data-pick="tts.ref_audio" data-kind="audio" style="margin-top:18px">浏览…</span>
@@ -753,6 +755,7 @@ pre.log{background:rgba(7,9,14,.78);border:1px solid var(--line);border-radius:1
       <label class="f">口型幅度 <b data-show="live2d.lip_gain"></b><input type="range" min="0.3" max="2.5" step="0.1" data-k="live2d.lip_gain"></label>
       <label class="f">待机动作（循环播放，留空=静止）<select data-k="live2d.idle_motion" id="l2dIdle"></select></label>
       <label class="f">说完后表情保留秒数<input type="number" step="0.5" data-k="live2d.expr_hold"></label>
+      <label class="f">动作播完后自动收尾秒数<input type="number" step="1" min="1" data-k="live2d.motion_hold"></label>
     </div>
     <div class="hint" style="margin-bottom:6px">常驻表情（一直开着的配件/换装，比如眼镜、发型）：</div>
     <div id="l2dBase" class="row" style="gap:6px 14px"></div>
@@ -776,9 +779,10 @@ pre.log{background:rgba(7,9,14,.78);border:1px solid var(--line);border-radius:1
   </div>
   <div class="card">
     <h3>情绪 → 表情 / 动作</h3>
-    <p class="hint">AI 回复时会从这些情绪里挑一个（名称会发给 AI）；模板和固定回复按“关键词”判断情绪。表情可以填多个（逗号分隔），从下面的列表里点名字可以试播。</p>
+    <p class="hint">AI 回复时会从这些情绪里挑一个（名称会发给 AI）；模板和固定回复按“关键词”判断情绪。表情可以填多个（逗号分隔），从下面的列表里点名字可以试播。<b>换皮套后请点一次「按当前皮套自动适配」</b>，会按新皮套实际的表情文件名重建映射，关键词（业务逻辑）保持不变。</p>
     <div id="emoList"></div>
     <span class="btn p" id="emoAdd">+ 添加情绪</span>
+    <span class="btn b" id="emoAuto">按当前皮套自动适配</span>
   </div>
   <div class="card">
     <h3>试播表情 / 动作</h3>
@@ -916,10 +920,21 @@ document.addEventListener('input', e => {
   if (e.target.dataset?.k && e.target.type === 'range') onField(e.target);
 });
 
+const fmtWeight = x => /^[A-Za-z]:[\\/]|^\//.test(x)
+  ? '[外部] ' + x.split(/[\\/]/).pop()
+  : x.replace(/^GPT_SoVITS\/pretrained_models\//, '[预训练] ');
 async function loadWeights() {
   const w = await api('/api/tts/weights');
-  for (const [sel, list] of [['#gptSel', w.gpt], ['#sovitsSel', w.sovits]]) $(sel).innerHTML = list.map(x => `<option value="${esc(x)}">${esc(x.replace(/^GPT_SoVITS\/pretrained_models\//, '[预训练] '))}</option>`).join('');
+  for (const [sel, list] of [['#gptSel', w.gpt], ['#sovitsSel', w.sovits]]) $(sel).innerHTML = list.map(x => `<option value="${esc(x)}">${esc(fmtWeight(x))}</option>`).join('');
   fillForm();
+}
+async function pickWeight(kind, sel) {
+  const r = await api('/api/tts/weights/pick', {kind});
+  if (r.cancelled) return;
+  if (!r.ok) return toast(r.error || '选择失败');
+  await loadWeights();
+  const el = $(sel); el.value = r.weight; onField(el);
+  toast('已应用该模型，并记进历史列表');
 }
 async function loadDevices() {
   const d = await api('/api/audio/devices');
@@ -930,7 +945,12 @@ async function loadConfig() { CFG = await api('/api/config'); fillForm(); }
 
 $$('[data-pick]').forEach(b => b.onclick = async () => {
   const k = b.dataset.pick, r = await api('/api/pick', {kind: b.dataset.kind, initial: getPath(CFG, k) || ''});
-  if (r.path) { const el = $(`[data-k="${k}"]`); el.value = r.path; onField(el); if (k === 'tts.gsv_dir') setTimeout(loadWeights, 800); }
+  if (r.path) {
+    const el = $(`[data-k="${k}"]`); el.value = r.path; onField(el);
+    if (k === 'tts.gsv_dir') setTimeout(loadWeights, 800);
+    // 程序赋值不会触发 change，这里必须手动刷新，否则选完目录模型列表还是旧的
+    if (k === 'live2d.model_dir') setTimeout(loadL2d, 800);
+  }
 });
 
 // ---------- 实时消息 ----------
@@ -1111,6 +1131,8 @@ $('#engStart').onclick = async () => { await api('/api/tts/start', {}); toast('�
 $('#engStop').onclick = async () => { const r = await api('/api/tts/stop', {}); toast(r.ok ? '已关闭引擎' : r.error); };
 $('#engLogBtn').onclick = async () => { const el = $('#engLog'); el.style.display = ''; el.textContent = await fetch('/api/tts/log').then(r => r.text()) || '（暂无日志：引擎可能不是由本软件启动的）'; el.scrollTop = el.scrollHeight; };
 $('#wRefresh').onclick = loadWeights; $('#devRefresh').onclick = loadDevices;
+$('#gptPick').onclick = () => pickWeight('gpt', '#gptSel');
+$('#sovitsPick').onclick = () => pickWeight('sovits', '#sovitsSel');
 
 // ---------- 固定话术烘焙 ----------
 async function refreshBake() {
@@ -1200,7 +1222,8 @@ async function loadL2d() {
   const base = CFG.live2d.base_expressions || [];
   $('#l2dBase').innerHTML = L2D.expressions.map(e => `<label class="c"><input type="checkbox" data-base="${esc(e.id)}" ${base.includes(e.id) ? 'checked' : ''}>${esc(e.label)}</label>`).join('') || '<span class="hint">（没有找到表情文件）</span>';
   $('#l2dExprBtns').innerHTML = L2D.expressions.map(e => `<span class="btn sm" data-texpr="${esc(e.id)}">${esc(e.label)}</span>`).join('');
-  $('#l2dMotionBtns').innerHTML = L2D.motions.map(m => `<span class="btn sm" data-tmotion="${esc(m.id)}">${esc(m.label)}</span>`).join('') || '<span class="hint">（无）</span>';
+  $('#l2dMotionBtns').innerHTML = L2D.motions.map(m => `<span class="btn sm" data-tmotion="${esc(m.id)}"${m.loop ? ' title="循环动作：播完会按“动作播完后自动收尾秒数”强制结束"' : ''}>${esc(m.label)}${m.loop ? ' ·循环' : ''}</span>`).join('') || '<span class="hint">（无）</span>';
+  if (L2D.cfg) Object.assign(CFG.live2d, L2D.cfg);  // 后端可能自动纠正了 model_file，同步回前端
   renderEmotions(); renderFixed(); fillForm();
 }
 function renderEmotions() {
@@ -1256,6 +1279,13 @@ document.addEventListener('click', e => {
   else if (d.copy) { navigator.clipboard.writeText($(d.copy).value); toast('已复制'); }
 });
 $('#emoAdd').onclick = () => saveEmotions([...collectEmotions(), {name: '新情绪', expressions: [], motion: '', keywords: ''}]);
+$('#emoAuto').onclick = async () => {
+  const r = await api('/api/l2d/auto_map', {});
+  if (!r.ok) return toast(r.error || '适配失败');
+  CFG.live2d.emotions = r.emotions;
+  renderEmotions(); renderFixed();
+  toast(`已按当前皮套适配 ${r.count} 个情绪，关键词保持不变`);
+};
 $('#fixedAdd').onclick = () => saveNow({fixed_replies: [...collectFixed(), {enabled: true, keywords: '', match: 'contains', reply: '', emotion: ''}]}).then(renderFixed);
 $('#l2dUrl').value = `${location.origin}/live2d`;
 $('#l2dPreview').onclick = () => window.open('/live2d?bg=303848', 'l2dprev', 'width=900,height=900');

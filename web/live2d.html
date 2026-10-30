@@ -39,7 +39,7 @@ let CFG = null, INFO = null, model = null, baseW = 1, baseH = 1, modelKey = '';
 const exprData = {};          // id -> exp3 json
 let active = [];              // {id, w, target, base}
 let mouth = 0, env = null, envStart = 0, envFps = 30, fakeMouth = false;
-let clearTimer = null, bubbleTimer = null, typeTimer = null, speakId = null;
+let clearTimer = null, bubbleTimer = null, typeTimer = null, speakId = null, motionTimer = null;
 
 async function fetchInfo() {
   INFO = await fetch('/api/l2d/info').then(r => r.json());
@@ -57,6 +57,7 @@ async function loadExpr(id) {
 async function loadModel() {
   errBox.textContent = '';
   if (model) { app.stage.removeChild(model); model.destroy(); model = null; }
+  clearTimeout(motionTimer); motionTimer = null;
   active = [];
   for (const k in exprData) delete exprData[k];
   if (!CFG.enabled) return;
@@ -125,14 +126,35 @@ async function setEmotionExprs(ids) {
   }
 }
 function clearEmotion() { for (const a of active) if (!a.base) a.target = 0; }
+function stopMotion() {
+  clearTimeout(motionTimer); motionTimer = null;
+  if (model) { try { model.internalModel.motionManager.stopAllMotions(); } catch (e) { } }
+}
 function playMotion(id) {
-  if (model && id && INFO.motions.some(m => m.id === id)) model.motion(id, 0, 3);
+  if (!model || !id) return;
+  const m = INFO.motions.find(x => x.id === id);
+  if (!m) return;
+  model.motion(id, 0, 3);
+  scheduleMotionClear(m);
+}
+// 动作播完再等 motion_hold 秒收尾。Loop=true 的动作永远不会自己结束（吹泡泡这类），
+// 必须主动 stopAllMotions，否则参数会一直停在最后一帧、盖住原本表情。
+function scheduleMotionClear(m) {
+  clearTimeout(motionTimer);
+  const hold = CFG.motion_hold ?? 15;
+  const wait = Math.max(hold, (m?.duration || 0) + 2);
+  motionTimer = setTimeout(() => {
+    motionTimer = null;
+    if (!model) return;
+    try { model.internalModel.motionManager.stopAllMotions(); } catch (e) { }
+    clearEmotion();
+  }, wait * 1000);
 }
 function applyEmotion(name) {
   const emo = (CFG.emotions || []).find(e => e.name === name);
   if (!emo) return false;
   setEmotionExprs(emo.expressions);
-  playMotion(emo.motion);
+  if (emo.motion) playMotion(emo.motion); else stopMotion();
   return true;
 }
 
@@ -185,7 +207,7 @@ function onSpeak(m) {
   clearTimeout(clearTimer);
   env = m.env && m.env.length ? m.env : null; envFps = m.fps || 30; envStart = performance.now();
   fakeMouth = !env;
-  if (!m.emotion || !applyEmotion(m.emotion)) clearEmotion();
+  if (!m.emotion || !applyEmotion(m.emotion)) { stopMotion(); clearEmotion(); }
   showBubble(m.text, m.dur);
 }
 function onSpeakEnd(m) {
@@ -199,7 +221,7 @@ async function onTest(m) {
   if (!CFG.enabled) return;
   clearTimeout(clearTimer);
   if (m.emotion) applyEmotion(m.emotion);
-  else { await setEmotionExprs(m.expressions); playMotion(m.motion); }
+  else { await setEmotionExprs(m.expressions); if (m.motion) playMotion(m.motion); else stopMotion(); }
   if (m.text) { showBubble(m.text, m.text.length * 0.2); hideBubbleLater(m.text.length * 0.2 + (CFG.bubble_hold ?? 4)); }
   clearTimer = setTimeout(clearEmotion, 4000);
 }

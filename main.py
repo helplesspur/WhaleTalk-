@@ -333,7 +333,7 @@ class App:
 
 
 # ---------- HTTP ----------
-def pick_path(kind, initial=""):
+def pick_path(kind, initial="", types=None):
     import tkinter
     from tkinter import filedialog
     root = tkinter.Tk()
@@ -342,8 +342,17 @@ def pick_path(kind, initial=""):
     try:
         if kind == "dir":
             return filedialog.askdirectory(initialdir=initial or None, title="选择文件夹")
-        types = [("音频文件", "*.wav *.mp3 *.flac *.ogg *.m4a"), ("所有文件", "*.*")] if kind == "audio" \
-            else [("程序", "*.exe"), ("所有文件", "*.*")]
+        if types is None:
+            if kind == "audio":
+                types = [("音频文件", "*.wav *.mp3 *.flac *.ogg *.m4a"), ("所有文件", "*.*")]
+            elif kind == "ckpt":
+                types = [("GPT 模型", "*.ckpt"), ("所有文件", "*.*")]
+            elif kind == "pth":
+                types = [("SoVITS 模型", "*.pth"), ("所有文件", "*.*")]
+            elif kind in ("exp3", "motion3"):
+                types = [("Live2D 素材", "*.exp3.json *.motion3.json"), ("所有文件", "*.*")]
+            else:
+                types = [("程序", "*.exe"), ("所有文件", "*.*")]
         return filedialog.askopenfilename(initialdir=initial or None, filetypes=types, title="选择文件")
     finally:
         root.destroy()
@@ -412,12 +421,37 @@ def build_web(app: App):
     async def l2d_info(_):
         l2d = app.cfg["live2d"]
         try:
-            exprs, motions = live2d.list_assets(l2d["model_dir"])
-            err = "" if os.path.exists(os.path.join(l2d["model_dir"], l2d["model_file"])) else "找不到模型文件"
+            files = live2d.list_model_files(l2d["model_dir"])
+            # 换了皮套文件夹后 model_file 还是旧名字，这里自动纠正，否则一直报“找不到模型文件”
+            fixed = live2d.pick_model_file(l2d["model_dir"], l2d.get("model_file", ""))
+            if fixed and fixed != l2d.get("model_file"):
+                l2d["model_file"] = fixed
+                config.save(app.cfg)
+            exprs, motions = live2d.list_assets(l2d["model_dir"], l2d.get("model_file", ""))
+            if not l2d.get("model_dir"):
+                err = "还没有选择皮套文件夹"
+            elif not fixed:
+                err = "文件夹里没有找到 .model3.json"
+            else:
+                err = ""
         except Exception as e:
-            exprs, motions, err = [], [], str(e)
+            exprs, motions, files, err = [], [], [], str(e)
         return web.json_response({"cfg": l2d, "expressions": exprs, "motions": motions, "error": err,
-                                  "model_files": live2d.list_model_files(l2d["model_dir"])})
+                                  "model_files": files})
+
+    @routes.post("/api/l2d/auto_map")
+    async def l2d_auto_map(_):
+        l2d = app.cfg["live2d"]
+        if not l2d.get("model_dir"):
+            return web.json_response({"ok": False, "error": "还没选择皮套文件夹"}, status=400)
+        exprs, motions = live2d.list_assets(l2d["model_dir"], l2d.get("model_file", ""))
+        if not exprs:
+            return web.json_response({"ok": False, "error": "这个皮套里没有 .exp3.json 表情文件"}, status=400)
+        emos = live2d.auto_emotions(exprs, motions, l2d.get("emotions"))
+        app.cfg = config.merge(app.cfg, {"live2d": {"emotions": emos}})
+        config.save(app.cfg)
+        app.push("l2d_config", {})
+        return ok(emotions=emos, count=len(emos))
 
     @routes.post("/api/l2d/test")
     async def l2d_test(request):
@@ -844,8 +878,45 @@ def build_web(app: App):
 
     @routes.get("/api/tts/weights")
     async def tts_weights(_):
-        gpt, sovits = app.engine.list_weights(app.cfg["tts"]["gsv_dir"])
+        t = app.cfg["tts"]
+        gpt, sovits = app.engine.list_weights(t["gsv_dir"])
+        # 用户用“浏览…”选过的外部模型，这里并进列表，下次开界面还在
+        for key, lst in (("custom_gpt", gpt), ("custom_sovits", sovits)):
+            for p in t.get(key) or []:
+                if os.path.isfile(p) and p not in lst:
+                    lst.append(p)
         return web.json_response({"gpt": gpt, "sovits": sovits})
+
+    @routes.post("/api/tts/weights/pick")
+    async def tts_weights_pick(request):
+        d = await request.json()
+        kind = d.get("kind")
+        if kind not in ("gpt", "sovits"):
+            return web.json_response({"ok": False, "error": "参数不对"}, status=400)
+        cur = app.cfg["tts"].get("gpt_weights" if kind == "gpt" else "sovits_weights") or ""
+        initial = os.path.dirname(cur) if os.path.isabs(cur) else (app.cfg["tts"].get("gsv_dir") or "")
+        path = await asyncio.get_running_loop().run_in_executor(
+            None, pick_path, "ckpt" if kind == "gpt" else "pth", initial, None)
+        path = (path or "").replace("/", "\\")
+        if not path:
+            return ok(cancelled=True)
+        if not os.path.isfile(path):
+            return web.json_response({"ok": False, "error": "文件不存在"}, status=400)
+        gsv = app.cfg["tts"]["gsv_dir"]
+        inside = bool(gsv) and os.path.realpath(path).startswith(os.path.realpath(gsv) + os.sep)
+        patch = {}
+        if inside:  # 在 GPT-SoVITS 目录里就用相对路径，换盘符也不会断
+            patch["gpt_weights" if kind == "gpt" else "sovits_weights"] = \
+                os.path.relpath(path, gsv).replace("\\", "/")
+        else:
+            key = "custom_gpt" if kind == "gpt" else "custom_sovits"
+            lst = [p for p in (app.cfg["tts"].get(key) or []) if os.path.isfile(p) and p != path][-29:]
+            lst.append(path)
+            patch[key] = lst
+            patch["gpt_weights" if kind == "gpt" else "sovits_weights"] = path
+        app.cfg = config.merge(app.cfg, {"tts": patch})
+        config.save(app.cfg)
+        return ok(path=path, weight=app.cfg["tts"]["gpt_weights" if kind == "gpt" else "sovits_weights"])
 
     @routes.get("/api/tts/log")
     async def tts_log(_):
